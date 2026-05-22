@@ -226,6 +226,12 @@ function parseGeometricTable(tableStr, isRubric = false) {
         }
         // Trim spaces from content lines
         const finalContent = processedLines.map(line => line.trim());
+        while (finalContent.length > 0 && finalContent[finalContent.length - 1] === '') {
+            finalContent.pop();
+        }
+        while (finalContent.length > 0 && finalContent[0] === '') {
+            finalContent.shift();
+        }
         cells.push({
             id: `cell-${cellCounter++}`,
             row: minJ,

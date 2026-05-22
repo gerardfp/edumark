@@ -1,6 +1,62 @@
 import { TableNode, TableCell } from '@edumark/shared';
 
+export function simplifyTable(table: TableNode): TableNode {
+  let { rowsCount, colsCount, cells } = table;
+  if (rowsCount <= 1 && colsCount <= 1) {
+    return table;
+  }
+
+  // Clone cells to avoid modifying the original node
+  let simplifiedCells = cells.map(cell => ({ ...cell }));
+
+  // 1. Simplify redundant column boundaries
+  // A column boundary k (1 <= k < colsCount) is redundant if no cell starts or ends at k.
+  for (let k = colsCount - 1; k >= 1; k--) {
+    const isRedundant = simplifiedCells.every(
+      cell => cell.column !== k && cell.column + cell.colspan !== k
+    );
+
+    if (isRedundant) {
+      for (const cell of simplifiedCells) {
+        if (cell.column >= k) {
+          cell.column -= 1;
+        } else if (cell.column + cell.colspan > k) {
+          cell.colspan -= 1;
+        }
+      }
+      colsCount -= 1;
+    }
+  }
+
+  // 2. Simplify redundant row boundaries
+  // A row boundary k (1 <= k < rowsCount) is redundant if no cell starts or ends at k.
+  for (let k = rowsCount - 1; k >= 1; k--) {
+    const isRedundant = simplifiedCells.every(
+      cell => cell.row !== k && cell.row + cell.rowspan !== k
+    );
+
+    if (isRedundant) {
+      for (const cell of simplifiedCells) {
+        if (cell.row >= k) {
+          cell.row -= 1;
+        } else if (cell.row + cell.rowspan > k) {
+          cell.rowspan -= 1;
+        }
+      }
+      rowsCount -= 1;
+    }
+  }
+
+  return {
+    ...table,
+    rowsCount,
+    colsCount,
+    cells: simplifiedCells
+  };
+}
+
 export function formatGeometricTable(table: TableNode): string {
+  table = simplifyTable(table);
   if (table.rowsCount === 0 || table.colsCount === 0 || table.cells.length === 0) {
     return '';
   }

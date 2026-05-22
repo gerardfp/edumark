@@ -95,20 +95,41 @@ export function parseGeometricTable(tableStr: string, isRubric = false): TableNo
         }
       }
 
-      // Map each internal separator to the closest vLines index
-      for (let k = 1; k < lineVLines.length - 1; k++) {
-        const s = lineVLines[k];
-        if (vLines.length > 2) {
-          let closestVal = vLines[1];
-          let minDiff = Math.abs(s - vLines[1]);
-          for (let idx = 2; idx < vLines.length - 1; idx++) {
-            const diff = Math.abs(s - vLines[idx]);
-            if (diff < minDiff) {
-              minDiff = diff;
-              closestVal = vLines[idx];
+      if (lineVLines.length >= 2) {
+        if (lineVLines.length >= vLines.length) {
+          // Map internal separators to internal vLines only
+          for (let idx = 1; idx < lineVLines.length - 1; idx++) {
+            const s = lineVLines[idx];
+            if (vLines.length > 2) {
+              let closestVal = vLines[1];
+              let minDiff = Math.abs(s - vLines[1]);
+              for (let vIdx = 2; vIdx < vLines.length - 1; vIdx++) {
+                const diff = Math.abs(s - vLines[vIdx]);
+                if (diff < minDiff) {
+                  minDiff = diff;
+                  closestVal = vLines[vIdx];
+                }
+              }
+              activeBoundaries.add(closestVal);
             }
           }
-          activeBoundaries.add(closestVal);
+        } else {
+          // Shorter row: map every separator to its closest vLines,
+          // but activeBoundaries only cares about internal vLines (exclude vLines[0] and vLines[vLines.length - 1])
+          for (const s of lineVLines) {
+            let closestVal = vLines[0];
+            let minDiff = Math.abs(s - vLines[0]);
+            for (let vIdx = 1; vIdx < vLines.length; vIdx++) {
+              const diff = Math.abs(s - vLines[vIdx]);
+              if (diff < minDiff) {
+                minDiff = diff;
+                closestVal = vLines[vIdx];
+              }
+            }
+            if (closestVal !== vLines[0] && closestVal !== vLines[vLines.length - 1]) {
+              activeBoundaries.add(closestVal);
+            }
+          }
         }
       }
     }
@@ -188,22 +209,41 @@ export function parseGeometricTable(tableStr: string, isRubric = false): TableNo
         let slice = '';
         if (lineVLines.length >= 2) {
           const boundaryPos = Array(vLines.length).fill(-1);
-          boundaryPos[0] = lineVLines[0];
-          boundaryPos[vLines.length - 1] = lineVLines[lineVLines.length - 1];
+          if (lineVLines.length >= vLines.length) {
+            // Full-length or longer row: map extremes to global extremes
+            boundaryPos[0] = lineVLines[0];
+            boundaryPos[vLines.length - 1] = lineVLines[lineVLines.length - 1];
 
-          // Map internal separators
-          for (let k = 1; k < lineVLines.length - 1; k++) {
-            const s = lineVLines[k];
-            let closestIdx = 1;
-            let minDiff = Math.abs(s - vLines[1]);
-            for (let idx = 2; idx < vLines.length - 1; idx++) {
-              const diff = Math.abs(s - vLines[idx]);
-              if (diff < minDiff) {
-                minDiff = diff;
-                closestIdx = idx;
+            // Map internal separators to internal vLines
+            for (let idx = 1; idx < lineVLines.length - 1; idx++) {
+              const s = lineVLines[idx];
+              if (vLines.length > 2) {
+                let closestIdx = 1;
+                let minDiff = Math.abs(s - vLines[1]);
+                for (let vIdx = 2; vIdx < vLines.length - 1; vIdx++) {
+                  const diff = Math.abs(s - vLines[vIdx]);
+                  if (diff < minDiff) {
+                    minDiff = diff;
+                    closestIdx = vIdx;
+                  }
+                }
+                boundaryPos[closestIdx] = s;
               }
             }
-            boundaryPos[closestIdx] = s;
+          } else {
+            // Shorter row: map every separator to its closest vLines index
+            for (const s of lineVLines) {
+              let closestIdx = 0;
+              let minDiff = Math.abs(s - vLines[0]);
+              for (let vIdx = 1; vIdx < vLines.length; vIdx++) {
+                const diff = Math.abs(s - vLines[vIdx]);
+                if (diff < minDiff) {
+                  minDiff = diff;
+                  closestIdx = vIdx;
+                }
+              }
+              boundaryPos[closestIdx] = s;
+            }
           }
 
           const startPos = boundaryPos[minI];
@@ -256,6 +296,12 @@ export function parseGeometricTable(tableStr: string, isRubric = false): TableNo
 
     // Trim spaces from content lines
     const finalContent = processedLines.map(line => line.trim());
+    while (finalContent.length > 0 && finalContent[finalContent.length - 1] === '') {
+      finalContent.pop();
+    }
+    while (finalContent.length > 0 && finalContent[0] === '') {
+      finalContent.shift();
+    }
 
     cells.push({
       id: `cell-${cellCounter++}`,

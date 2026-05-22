@@ -1,0 +1,12 @@
+* Editing a cell auto-resizes it in "real-time"
+
+* For table layout changes, you must press TAB with 
+the cursor touching a table line dash (-)
+
+* Table layout change intentions are done writing 
+dashes (-) or pipes (|) touching existing table lines (-)
+
+* To create a single cell table, write |- and press TAB 
+
+* To create a multi cell table write |RxC and press TAB (R is the number of rows and C is the number of columns). For example |3x5 will create
+a table with 3 rows and 5 columns. 

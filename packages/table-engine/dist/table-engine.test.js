@@ -175,5 +175,39 @@ const table_formatter_js_1 = require("./table-formatter.js");
 `.trim();
         (0, vitest_1.expect)(formatted).toBe(expected);
     });
+    (0, vitest_1.it)('should simplify table with redundant column boundaries (Case 1 from table_simplify)', () => {
+        const tableStr = `
+|---|---|
+| A     |
+|---|---|
+`.trim();
+        const parsed = (0, table_parser_js_1.parseGeometricTable)(tableStr);
+        const formatted = (0, table_formatter_js_1.formatGeometricTable)(parsed);
+        const expected = `
+|---|
+| A |
+|---|
+`.trim();
+        (0, vitest_1.expect)(formatted).toBe(expected);
+    });
+    (0, vitest_1.it)('should simplify table with redundant column boundaries (Case 2 from table_simplify)', () => {
+        const tableStr = `
+|---|---|---|
+| A         |
+|---|---|---|
+|   |       |
+|---|---|---|
+`.trim();
+        const parsed = (0, table_parser_js_1.parseGeometricTable)(tableStr);
+        const formatted = (0, table_formatter_js_1.formatGeometricTable)(parsed);
+        const expected = `
+|---|---|
+| A     |
+|---|---|
+|   |   |
+|---|---|
+`.trim();
+        (0, vitest_1.expect)(formatted).toBe(expected);
+    });
 });
 //# sourceMappingURL=table-engine.test.js.map

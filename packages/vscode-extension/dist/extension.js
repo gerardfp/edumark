@@ -184,6 +184,25 @@ function activate(context) {
         while (endLineIdx < document.lineCount - 1 && document.lineAt(endLineIdx + 1).text.trim().startsWith('|')) {
             endLineIdx++;
         }
+        const firstPipeCurrentLine = currentLineText.indexOf('|');
+        const lastPipeCurrentLine = currentLineText.lastIndexOf('|');
+        let isLeftColumnAddition = false;
+        let isRightColumnAddition = false;
+        if (firstPipeCurrentLine !== -1 && startLineIdx !== endLineIdx) {
+            const beforeFirstPipe = currentLineText.substring(0, firstPipeCurrentLine);
+            const afterLastPipe = currentLineText.substring(lastPipeCurrentLine + 1);
+            if (/[-=_]/.test(beforeFirstPipe)) {
+                isLeftColumnAddition = true;
+            }
+            else if (/[-=_]/.test(afterLastPipe)) {
+                isRightColumnAddition = true;
+            }
+        }
+        const isColumnAddition = isLeftColumnAddition || isRightColumnAddition;
+        const isPartialBorder = isPartialBorderRow(currentLineText) || isColumnAddition;
+        if (isPartialBorder) {
+            return;
+        }
         const tableLines = [];
         for (let l = startLineIdx; l <= endLineIdx; l++) {
             tableLines.push(document.lineAt(l).text);
@@ -196,8 +215,9 @@ function activate(context) {
         catch (e) {
             return;
         }
-        if (!tableNode || tableNode.cells.length === 0)
+        if (!tableNode || tableNode.cells.length === 0) {
             return;
+        }
         const r = currentLineIdx - startLineIdx;
         const c = position.character;
         const maxLength = Math.max(...tableLines.map(line => line.length));
@@ -249,9 +269,62 @@ function activate(context) {
         const cell = tableNode.cells.find((cell) => cell.row <= j && j < cell.row + cell.rowspan && cell.column <= i && i < cell.column + cell.colspan);
         if (!cell)
             return;
-        // 1. Calculate non-whitespace character count and trailing spaces before the cursor inside this cell
         const cellStartRow = startLineIdx + hLines[cell.row] + 1;
         const cellEndRow = startLineIdx + hLines[cell.row + cell.rowspan] - 1;
+        // Extract un-trimmed lines of the active cell to preserve typed spaces/tabs
+        const activeCellLines = [];
+        for (let rowIdx = cellStartRow; rowIdx <= cellEndRow; rowIdx++) {
+            const lineText = document.lineAt(rowIdx).text;
+            const boundaryPos = getLineBoundaryPos(lineText, vLines);
+            const leftSep = boundaryPos[cell.column] !== -1 ? boundaryPos[cell.column] : vLines[cell.column];
+            const rightSep = boundaryPos[cell.column + cell.colspan] !== -1 ? boundaryPos[cell.column + cell.colspan] : vLines[cell.column + cell.colspan];
+            if (leftSep !== -1 && rightSep !== -1) {
+                const slice = lineText.substring(leftSep + 1, rightSep);
+                let cellLineText = slice.startsWith(' ') ? slice.substring(1) : slice;
+                if (rowIdx === currentLineIdx) {
+                    if (/^\s*$/.test(slice)) {
+                        const relCursor = c - (leftSep + 1);
+                        const intentSpaces = Math.max(0, relCursor - 1);
+                        cellLineText = " ".repeat(intentSpaces);
+                    }
+                    else {
+                        const relCursor = c - (leftSep + 1);
+                        const cursorIdx = slice.startsWith(' ') ? relCursor - 1 : relCursor;
+                        const beforeCursor = cellLineText.substring(0, cursorIdx);
+                        const afterCursor = cellLineText.substring(cursorIdx);
+                        if (/^\s*$/.test(afterCursor)) {
+                            cellLineText = beforeCursor;
+                        }
+                        else {
+                            cellLineText = beforeCursor + afterCursor.trimEnd();
+                        }
+                    }
+                }
+                else {
+                    cellLineText = cellLineText.trim();
+                }
+                activeCellLines.push(cellLineText);
+            }
+            else {
+                activeCellLines.push('');
+            }
+        }
+        // Trim trailing/leading empty lines but protect the one with the active cursor
+        while (activeCellLines.length > 0 && activeCellLines[activeCellLines.length - 1] === '') {
+            const lastLineIdx = cellStartRow + activeCellLines.length - 1;
+            if (lastLineIdx === currentLineIdx) {
+                break;
+            }
+            activeCellLines.pop();
+        }
+        while (activeCellLines.length > 0 && activeCellLines[0] === '') {
+            const firstLineIdx = cellStartRow;
+            if (firstLineIdx === currentLineIdx) {
+                break;
+            }
+            activeCellLines.shift();
+        }
+        cell.content = activeCellLines;
         let textBeforeCursor = '';
         for (let rowIdx = cellStartRow; rowIdx <= cellEndRow; rowIdx++) {
             const lineText = document.lineAt(rowIdx).text;
@@ -412,19 +485,316 @@ function activate(context) {
             currentEditor.selection = new vscode.Selection(newPosition, newPosition);
         }
     }
-    // Pre-format visible editors and open documents on launch with staggered delays to ensure readiness
-    const startupDelays = [0, 100, 500, 1000, 2000, 5000];
-    startupDelays.forEach(delay => {
-        setTimeout(() => {
-            logToFile(`Startup staggered timeout ${delay}ms firing`);
-            for (const editor of vscode.window.visibleTextEditors) {
-                formatAllTablesInDocument(editor.document);
+    async function runLayoutFormatting(currentEditor, document) {
+        if (isFormatting)
+            return;
+        const position = currentEditor.selection.active;
+        const currentLineIdx = position.line;
+        const currentLineText = document.lineAt(currentLineIdx).text;
+        if (!/^\s*[-=_]?\|/.test(currentLineText))
+            return;
+        let startLineIdx = currentLineIdx;
+        while (startLineIdx > 0 && document.lineAt(startLineIdx - 1).text.trim().startsWith('|')) {
+            startLineIdx--;
+        }
+        let endLineIdx = currentLineIdx;
+        while (endLineIdx < document.lineCount - 1 && document.lineAt(endLineIdx + 1).text.trim().startsWith('|')) {
+            endLineIdx++;
+        }
+        const firstPipeCurrentLine = currentLineText.indexOf('|');
+        const lastPipeCurrentLine = currentLineText.lastIndexOf('|');
+        let isLeftColumnAddition = false;
+        let isRightColumnAddition = false;
+        if (firstPipeCurrentLine !== -1 && startLineIdx !== endLineIdx) {
+            const beforeFirstPipe = currentLineText.substring(0, firstPipeCurrentLine);
+            const afterLastPipe = currentLineText.substring(lastPipeCurrentLine + 1);
+            if (/[-=_]/.test(beforeFirstPipe)) {
+                isLeftColumnAddition = true;
             }
-            for (const document of vscode.workspace.textDocuments) {
-                formatAllTablesInDocument(document);
+            else if (/[-=_]/.test(afterLastPipe)) {
+                isRightColumnAddition = true;
             }
-        }, delay);
-    });
+        }
+        const isColumnAddition = isLeftColumnAddition || isRightColumnAddition;
+        let tableLines = [];
+        const borderChar = currentLineText.includes('=') ? '=' : (currentLineText.includes('_') ? '_' : '-');
+        for (let l = startLineIdx; l <= endLineIdx; l++) {
+            let originalLine = '';
+            if (l === currentLineIdx) {
+                if (isLeftColumnAddition) {
+                    originalLine = currentLineText.trim().replace(/^[-=_]+/, '');
+                }
+                else if (isRightColumnAddition) {
+                    originalLine = currentLineText.trim().replace(/[-=_]+$/, '');
+                }
+                else {
+                    originalLine = currentLineText;
+                }
+            }
+            else {
+                originalLine = document.lineAt(l).text;
+            }
+            const trimmedOriginal = originalLine.trim();
+            const isBorder = /^[|+\-\s=_]+$/.test(trimmedOriginal) &&
+                (/[-=_]/.test(trimmedOriginal) || trimmedOriginal.includes('+'));
+            if (isLeftColumnAddition) {
+                if (l === currentLineIdx) {
+                    if (isBorder) {
+                        tableLines.push('|' + borderChar.repeat(3) + originalLine.trim());
+                    }
+                    else {
+                        tableLines.push('|' + borderChar + '  ' + originalLine.trim());
+                    }
+                }
+                else {
+                    if (isBorder) {
+                        tableLines.push('|' + borderChar.repeat(3) + originalLine.trim());
+                    }
+                    else {
+                        tableLines.push('|   ' + originalLine.trim());
+                    }
+                }
+            }
+            else if (isRightColumnAddition) {
+                if (l === currentLineIdx) {
+                    if (isBorder) {
+                        tableLines.push(originalLine.trimEnd() + borderChar.repeat(3) + '|');
+                    }
+                    else {
+                        tableLines.push(originalLine.trimEnd() + borderChar + '|');
+                    }
+                }
+                else {
+                    if (isBorder) {
+                        tableLines.push(originalLine.trimEnd() + borderChar.repeat(3) + '|');
+                    }
+                    else {
+                        tableLines.push(originalLine.trimEnd() + '   |');
+                    }
+                }
+            }
+            else {
+                tableLines.push(originalLine);
+            }
+        }
+        const stableVLinesSet = new Set();
+        for (let idx = 0; idx < tableLines.length; idx++) {
+            if (idx === currentLineIdx - startLineIdx)
+                continue;
+            const lineText = tableLines[idx];
+            for (let c = 0; c < lineText.length; c++) {
+                if (lineText[c] === '|') {
+                    stableVLinesSet.add(c);
+                }
+            }
+        }
+        const stableVLines = Array.from(stableVLinesSet).sort((a, b) => a - b);
+        const isPartialBorder = isPartialBorderRow(currentLineText) && !isColumnAddition;
+        if (isPartialBorder) {
+            if (stableVLines.length >= 2) {
+                const rawParts = currentLineText.split('|');
+                const colContents = rawParts.slice(1, rawParts.length - 1);
+                let alignedLine = '|';
+                for (let i = 0; i < stableVLines.length - 1; i++) {
+                    const colWidth = stableVLines[i + 1] - stableVLines[i] - 1;
+                    const rawContent = colContents[i] !== undefined ? colContents[i] : (currentLineText.includes('-') ? '-' : '');
+                    const trimmedCol = rawContent.trim();
+                    const isColBorder = trimmedCol.length > 0 &&
+                        /^[|+\-\s=_]+$/.test(rawContent) &&
+                        /[-=_]/.test(rawContent);
+                    if (isColBorder || currentLineText.trim() === '|-' || currentLineText.trim() === '|') {
+                        const borderChar = trimmedCol.includes('=') ? '=' : (trimmedCol.includes('_') ? '_' : '-');
+                        alignedLine += borderChar.repeat(colWidth) + '|';
+                    }
+                    else {
+                        alignedLine += rawContent.padEnd(colWidth, ' ').substring(0, colWidth) + '|';
+                    }
+                }
+                tableLines[currentLineIdx - startLineIdx] = alignedLine;
+            }
+        }
+        // Pre-processing step: Horizontally split cells that contain a split dash
+        let updatedTableLines = [];
+        for (let r = 0; r < tableLines.length; r++) {
+            const lineText = tableLines[r];
+            const isBorder = /^[|+\-\s=_]+$/.test(lineText.trim()) &&
+                (/[-=_]/.test(lineText.trim()) || lineText.includes('+')) &&
+                !isCellSplittingRow(lineText);
+            if (isBorder) {
+                updatedTableLines.push(lineText);
+                continue;
+            }
+            const parts = lineText.split('|');
+            if (parts.length < 2) {
+                updatedTableLines.push(lineText);
+                continue;
+            }
+            const colContents = parts.slice(1, parts.length - 1);
+            const splitCols = [];
+            const cleanedCols = [];
+            for (let i = 0; i < colContents.length; i++) {
+                const cellText = colContents[i];
+                const trimmedCell = cellText.trim();
+                const isCompleteBorder = /^[-=_]{2,}$/.test(trimmedCell) && !cellText.includes(' ');
+                const hasSplitDash = trimmedCell.length > 0 &&
+                    (/^[-=_]+/.test(trimmedCell) || /[-=_]+$/.test(trimmedCell)) &&
+                    !isCompleteBorder;
+                if (hasSplitDash) {
+                    splitCols.push(i);
+                    let cleaned = cellText;
+                    cleaned = cleaned.replace(/^[-=_]+/, '');
+                    cleaned = cleaned.replace(/[-=_]+$/, '');
+                    cleanedCols.push(cleaned);
+                }
+                else {
+                    cleanedCols.push(cellText);
+                }
+            }
+            if (splitCols.length > 0) {
+                const cleanedLine = '|' + cleanedCols.join('|') + '|';
+                updatedTableLines.push(cleanedLine);
+                let borderRow = '|';
+                for (let i = 0; i < colContents.length; i++) {
+                    const colWidth = (stableVLines[i + 1] !== undefined && stableVLines[i] !== undefined)
+                        ? (stableVLines[i + 1] - stableVLines[i] - 1)
+                        : colContents[i].length;
+                    if (splitCols.includes(i)) {
+                        const trimmedCell = colContents[i].trim();
+                        const borderChar = trimmedCell.includes('=') ? '=' : (trimmedCell.includes('_') ? '_' : '-');
+                        borderRow += borderChar.repeat(colWidth) + '|';
+                    }
+                    else {
+                        borderRow += ' '.repeat(colWidth) + '|';
+                    }
+                }
+                updatedTableLines.push(borderRow);
+                let emptyRow = '|';
+                for (let i = 0; i < colContents.length; i++) {
+                    const colWidth = (stableVLines[i + 1] !== undefined && stableVLines[i] !== undefined)
+                        ? (stableVLines[i + 1] - stableVLines[i] - 1)
+                        : colContents[i].length;
+                    emptyRow += ' '.repeat(colWidth) + '|';
+                }
+                updatedTableLines.push(emptyRow);
+            }
+            else {
+                updatedTableLines.push(lineText);
+            }
+        }
+        tableLines = updatedTableLines;
+        const tableStr = tableLines.join('\n');
+        let tableNode;
+        try {
+            tableNode = (0, table_engine_1.parseGeometricTable)(tableStr);
+        }
+        catch (e) {
+            return;
+        }
+        if (!tableNode || tableNode.cells.length === 0) {
+            if (isPartialBorderRow(currentLineText)) {
+                let success = false;
+                const eol = document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
+                const newTable = `|---|${eol}|   |${eol}|---|`;
+                try {
+                    isFormatting = true;
+                    isApplyingExtensionEdit = true;
+                    const range = new vscode.Range(new vscode.Position(currentLineIdx, 0), new vscode.Position(currentLineIdx, currentLineText.length));
+                    const workspaceEdit = new vscode.WorkspaceEdit();
+                    workspaceEdit.replace(document.uri, range, newTable);
+                    success = await vscode.workspace.applyEdit(workspaceEdit);
+                }
+                catch (err) {
+                    logToFile(`Error creating new 1x1 table in layoutTab: ${err.message}`);
+                }
+                finally {
+                    isApplyingExtensionEdit = false;
+                    isFormatting = false;
+                }
+                if (success) {
+                    const newPosition = new vscode.Position(currentLineIdx + 1, 2);
+                    currentEditor.selection = new vscode.Selection(newPosition, newPosition);
+                }
+            }
+            return;
+        }
+        let formattedTable;
+        try {
+            formattedTable = (0, table_engine_1.formatGeometricTable)(tableNode);
+        }
+        catch (e) {
+            logToFile(`Error formatting table in runLayoutFormatting: ${e.message}`);
+            return;
+        }
+        let success = false;
+        try {
+            isFormatting = true;
+            isApplyingExtensionEdit = true;
+            const range = new vscode.Range(new vscode.Position(startLineIdx, 0), new vscode.Position(endLineIdx, document.lineAt(endLineIdx).text.length));
+            const workspaceEdit = new vscode.WorkspaceEdit();
+            workspaceEdit.replace(document.uri, range, formattedTable);
+            success = await vscode.workspace.applyEdit(workspaceEdit);
+        }
+        catch (err) {
+            logToFile(`Error applying live format edit (layout Tab): ${err.message}`);
+        }
+        finally {
+            isApplyingExtensionEdit = false;
+            isFormatting = false;
+        }
+        if (success) {
+            const newLines = formattedTable.split('\n');
+            let colIdx = 0;
+            let pipeCount = 0;
+            for (let charIdx = 0; charIdx < Math.min(position.character, currentLineText.length); charIdx++) {
+                if (currentLineText[charIdx] === '|') {
+                    pipeCount++;
+                }
+            }
+            colIdx = Math.max(0, pipeCount - 1);
+            const lineAtCurrent = newLines[currentLineIdx - startLineIdx];
+            const isCurrentContent = lineAtCurrent &&
+                lineAtCurrent.trim().startsWith('|') &&
+                !(/^[|+\-\s=_]+$/.test(lineAtCurrent) &&
+                    (/[-=_]/.test(lineAtCurrent) || lineAtCurrent.includes('+')));
+            const lineBelowCurrent = newLines[currentLineIdx - startLineIdx + 1];
+            const isBelowContent = lineBelowCurrent &&
+                lineBelowCurrent.trim().startsWith('|') &&
+                !(/^[|+\-\s=_]+$/.test(lineBelowCurrent) &&
+                    (/[-=_]/.test(lineBelowCurrent) || lineBelowCurrent.includes('+')));
+            let targetLineIdx = -1;
+            if (isColumnAddition) {
+                targetLineIdx = currentLineIdx === startLineIdx ? currentLineIdx + 1 : currentLineIdx - 1;
+            }
+            else if (isBelowContent) {
+                targetLineIdx = currentLineIdx + 1;
+            }
+            else if (isCurrentContent) {
+                targetLineIdx = currentLineIdx;
+            }
+            if (targetLineIdx !== -1) {
+                const targetLineText = newLines[targetLineIdx - startLineIdx];
+                let currentPipeIdx = -1;
+                let pCount = 0;
+                for (let k = 0; k < targetLineText.length; k++) {
+                    if (targetLineText[k] === '|') {
+                        if (pCount === colIdx) {
+                            currentPipeIdx = k;
+                            break;
+                        }
+                        pCount++;
+                    }
+                }
+                const targetCharIdx = currentPipeIdx !== -1 ? currentPipeIdx + 2 : 2;
+                const newPosition = new vscode.Position(targetLineIdx, targetCharIdx);
+                currentEditor.selection = new vscode.Selection(newPosition, newPosition);
+            }
+            else {
+                const formattedLineText = newLines[currentLineIdx - startLineIdx] || '';
+                const newPosition = new vscode.Position(currentLineIdx, formattedLineText.length);
+                currentEditor.selection = new vscode.Selection(newPosition, newPosition);
+            }
+        }
+    }
     // Auto-update Webview and format tables live when text document changes
     vscode.workspace.onDidChangeTextDocument(async (event) => {
         if (previewPanel && event.document === vscode.window.activeTextEditor?.document) {
@@ -460,49 +830,14 @@ function activate(context) {
             await runLiveFormatting(currentEditor, event.document);
         }, 100);
     });
-    // Auto-update Webview and preformat when active editor changes
+    // Auto-update Webview when active editor changes
     vscode.window.onDidChangeActiveTextEditor(editor => {
         logToFile(`onDidChangeActiveTextEditor fired for ${editor ? editor.document.fileName : 'undefined'}`);
         if (previewPanel && editor && (editor.document.languageId === 'edumark' || editor.document.fileName.endsWith('.did'))) {
             previewPanel.title = `Vista Previa: ${vscode.workspace.asRelativePath(editor.document.uri)}`;
             updateWebview(editor.document);
         }
-        if (editor) {
-            const delays = [0, 50, 100, 300, 500, 1000, 2000];
-            delays.forEach(delay => {
-                setTimeout(() => {
-                    logToFile(`Active editor change timeout ${delay}ms firing`);
-                    if (vscode.window.activeTextEditor === editor) {
-                        formatAllTablesInDocument(editor.document);
-                    }
-                }, delay);
-            });
-        }
     });
-    // Pre-format when a text document is opened
-    context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(document => {
-        logToFile(`onDidOpenTextDocument fired for ${document.fileName}`);
-        const delays = [0, 50, 100, 300, 500, 1000, 2000];
-        delays.forEach(delay => {
-            setTimeout(() => {
-                logToFile(`Document open timeout ${delay}ms firing for ${document.fileName}`);
-                formatAllTablesInDocument(document);
-            }, delay);
-        });
-    }));
-    // Pre-format when visible text editors change
-    context.subscriptions.push(vscode.window.onDidChangeVisibleTextEditors(editors => {
-        logToFile(`onDidChangeVisibleTextEditors fired with ${editors.length} editors`);
-        for (const editor of editors) {
-            const delays = [0, 50, 100, 300, 500, 1000, 2000];
-            delays.forEach(delay => {
-                setTimeout(() => {
-                    logToFile(`Visible editors change timeout ${delay}ms firing for ${editor.document.fileName}`);
-                    formatAllTablesInDocument(editor.document);
-                }, delay);
-            });
-        }
-    }));
     function updateWebview(document) {
         if (!previewPanel)
             return;
@@ -622,6 +957,26 @@ function activate(context) {
         while (endLineIdx < document.lineCount - 1 && document.lineAt(endLineIdx + 1).text.trim().startsWith('|')) {
             endLineIdx++;
         }
+        const firstPipeCurrentLine = currentLineText.indexOf('|');
+        const lastPipeCurrentLine = currentLineText.lastIndexOf('|');
+        let isLeftColumnAddition = false;
+        let isRightColumnAddition = false;
+        if (firstPipeCurrentLine !== -1 && startLineIdx !== endLineIdx) {
+            const beforeFirstPipe = currentLineText.substring(0, firstPipeCurrentLine);
+            const afterLastPipe = currentLineText.substring(lastPipeCurrentLine + 1);
+            if (/[-=_]/.test(beforeFirstPipe)) {
+                isLeftColumnAddition = true;
+            }
+            else if (/[-=_]/.test(afterLastPipe)) {
+                isRightColumnAddition = true;
+            }
+        }
+        const isColumnAddition = isLeftColumnAddition || isRightColumnAddition;
+        const isPartialBorder = isPartialBorderRow(currentLineText) || isColumnAddition;
+        if (isPartialBorder) {
+            await vscode.commands.executeCommand('type', { text: '\n' });
+            return;
+        }
         const tableLines = [];
         for (let l = startLineIdx; l <= endLineIdx; l++) {
             tableLines.push(document.lineAt(l).text);
@@ -643,8 +998,8 @@ function activate(context) {
         const r = currentLineIdx - startLineIdx;
         const c = position.character;
         // Find hLines and vLines exactly as in the parser
-        const maxLength = Math.max(...tableLines.map(line => line.length));
-        const grid = tableLines.map(line => line.padEnd(maxLength, ' '));
+        const maxLength = Math.max(...tableLines.map((line) => line.length));
+        const grid = tableLines.map((line) => line.padEnd(maxLength, ' '));
         const hLines = [];
         for (let row = 0; row < grid.length; row++) {
             const rowStr = grid[row];
@@ -716,8 +1071,8 @@ function activate(context) {
         const cellColEnd = rightSep - 1;
         const cellLineSlice = documentLineText.substring(colStart, cellColEnd + 1);
         const relCursor = c - colStart;
-        const part1 = cellLineSlice.substring(0, relCursor).trim();
-        const part2 = cellLineSlice.substring(relCursor).trim();
+        const part1 = cellLineSlice.substring(0, relCursor).trimStart();
+        const part2 = cellLineSlice.substring(relCursor).trimEnd();
         // Reconstruct cell content
         const newContent = [...cell.content];
         while (newContent.length <= lineIdx) {
@@ -792,8 +1147,35 @@ function activate(context) {
             activeEditor.selection = new vscode.Selection(newPosition, newPosition);
         }
     });
+    const tableTabCommand = vscode.commands.registerCommand('edumark.tableTab', async () => {
+        const activeEditor = vscode.window.activeTextEditor;
+        if (!activeEditor || activeEditor.document.languageId !== 'edumark') {
+            await vscode.commands.executeCommand('tab');
+            return;
+        }
+        const document = activeEditor.document;
+        const position = activeEditor.selection.active;
+        const currentLineText = document.lineAt(position.line).text;
+        const textBeforeCursor = currentLineText.substring(0, position.character);
+        const textAfterCursor = currentLineText.substring(position.character);
+        // 1. Cursor just after dashes that have '|' before them: e.g. |-[cursor] or |---[cursor]
+        const cond1 = /\| *[-=_]+$/.test(textBeforeCursor);
+        // 2. Cursor just before dashes that have '|' before them: e.g. |[cursor]- or |[cursor]---
+        const cond2 = /\| *$/.test(textBeforeCursor) && /^[-=_]+/.test(textAfterCursor);
+        // 3. Cursor just after dashes that have '|' after them: e.g. -[cursor]| or ---[cursor]|
+        const cond3 = /[-=_]+$/.test(textBeforeCursor) && /^ *\|/.test(textAfterCursor);
+        // 4. Cursor just before dashes that have '|' after them: e.g. [cursor]-| or [cursor]---|
+        const cond4 = /^[-=_]+ *\|/.test(textAfterCursor);
+        if (cond1 || cond2 || cond3 || cond4) {
+            await runLayoutFormatting(activeEditor, document);
+        }
+        else {
+            await vscode.commands.executeCommand('tab');
+        }
+    });
     context.subscriptions.push(formattingProvider);
     context.subscriptions.push(tableEnterCommand);
+    context.subscriptions.push(tableTabCommand);
 }
 function deactivate() { }
 function getLineBoundaryPos(lineText, vLines) {
@@ -822,4 +1204,49 @@ function getLineBoundaryPos(lineText, vLines) {
         }
     }
     return boundaryPos;
+}
+function isCellSplittingRow(lineText) {
+    const trimmed = lineText.trim();
+    if (!trimmed.startsWith('|') || !trimmed.endsWith('|'))
+        return false;
+    const parts = trimmed.split('|');
+    const colContents = parts.slice(1, parts.length - 1);
+    let hasSplitDash = false;
+    let hasNonBorderCell = false;
+    for (const cell of colContents) {
+        const trimmedCell = cell.trim();
+        if (trimmedCell.length > 0) {
+            const isCompleteBorder = /^[-=_]{2,}$/.test(trimmedCell) && !cell.includes(' ');
+            const isSplit = (/^[-=_]+/.test(trimmedCell) || /[-=_]+$/.test(trimmedCell)) && !isCompleteBorder;
+            if (isSplit) {
+                hasSplitDash = true;
+            }
+            if (!isCompleteBorder) {
+                hasNonBorderCell = true;
+            }
+        }
+        else {
+            hasNonBorderCell = true;
+        }
+    }
+    return hasSplitDash && hasNonBorderCell;
+}
+function isPartialBorderRow(text) {
+    if (isCellSplittingRow(text))
+        return false;
+    const trimmed = text.trim();
+    if (!trimmed.startsWith('|'))
+        return false;
+    if (!/^[|+\-\s=_]+$/.test(trimmed))
+        return false;
+    if (!/[-=_]/.test(trimmed))
+        return false;
+    if (!trimmed.endsWith('|'))
+        return true;
+    // It is a partial border row if it contains an incomplete column (a pipe followed by a space and a dash, or a pipe followed by a dash and spaces)
+    // E.g., "| -", "|- ", "| =", "|= ", "| _", "|_ "
+    if (/\| \s*[-=_]/.test(trimmed) || /\|[-=_]\s+/.test(trimmed) || /\s+[-=_]\s*\|/.test(trimmed)) {
+        return true;
+    }
+    return false;
 }

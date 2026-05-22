@@ -48,12 +48,22 @@
         "command": "edumark.tableEnter",
         "title": "Edumark: Insertar nueva línea en celda de tabla",
         "category": "Edumark"
+      },
+      {
+        "command": "edumark.tableTab",
+        "title": "Edumark: Autoformatear layout de tabla con Tabulador",
+        "category": "Edumark"
       }
     ],
     "keybindings": [
       {
         "command": "edumark.tableEnter",
         "key": "enter",
+        "when": "editorTextFocus && editorLangId == edumark"
+      },
+      {
+        "command": "edumark.tableTab",
+        "key": "tab",
         "when": "editorTextFocus && editorLangId == edumark"
       }
     ],

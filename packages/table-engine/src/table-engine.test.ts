@@ -207,4 +207,46 @@ describe('Table Engine - Formatter', () => {
 
     expect(formatted).toBe(expected);
   });
+
+  it('should simplify table with redundant column boundaries (Case 1 from table_simplify)', () => {
+    const tableStr = `
+|---|---|
+| A     |
+|---|---|
+`.trim();
+
+    const parsed = parseGeometricTable(tableStr);
+    const formatted = formatGeometricTable(parsed);
+
+    const expected = `
+|---|
+| A |
+|---|
+`.trim();
+
+    expect(formatted).toBe(expected);
+  });
+
+  it('should simplify table with redundant column boundaries (Case 2 from table_simplify)', () => {
+    const tableStr = `
+|---|---|---|
+| A         |
+|---|---|---|
+|   |       |
+|---|---|---|
+`.trim();
+
+    const parsed = parseGeometricTable(tableStr);
+    const formatted = formatGeometricTable(parsed);
+
+    const expected = `
+|---|---|
+| A     |
+|---|---|
+|   |   |
+|---|---|
+`.trim();
+
+    expect(formatted).toBe(expected);
+  });
 });
