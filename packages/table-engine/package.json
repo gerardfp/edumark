@@ -1,0 +1,13 @@
+{
+  "name": "@edumark/table-engine",
+  "version": "1.0.0",
+  "description": "Geometric table parser and formatter for Edumark",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@edumark/shared": "*"
+  }
+}

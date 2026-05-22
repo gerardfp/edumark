@@ -1,0 +1,84 @@
+{
+  "name": "edumark-vscode",
+  "displayName": "Edumark",
+  "description": "Herramienta de edición para Edumark (coloreado, autocompletado y vista previa)",
+  "version": "1.0.0",
+  "publisher": "gerard",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Formatters",
+    "Snippets"
+  ],
+  "activationEvents": [
+    "*"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "edumark",
+        "aliases": ["Edumark", "edumark"],
+        "extensions": [".did"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "edumark",
+        "scopeName": "source.did",
+        "path": "./syntaxes/edumark.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "edumark",
+        "path": "./snippets/snippets.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "edumark.showPreview",
+        "title": "Edumark: Mostrar Vista Previa",
+        "category": "Edumark"
+      },
+      {
+        "command": "edumark.tableEnter",
+        "title": "Edumark: Insertar nueva línea en celda de tabla",
+        "category": "Edumark"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "edumark.tableEnter",
+        "key": "enter",
+        "when": "editorTextFocus && editorLangId == edumark"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "edumark.showPreview",
+          "group": "navigation",
+          "when": "resourceLangId == edumark"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "@edumark/shared": "*",
+    "@edumark/parser": "*",
+    "@edumark/renderer-html": "*",
+    "@edumark/table-engine": "*"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0"
+  }
+}

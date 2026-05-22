@@ -1,0 +1,11 @@
+{
+  "name": "@edumark/shared",
+  "version": "1.0.0",
+  "description": "Shared AST and types for Edumark",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {}
+}

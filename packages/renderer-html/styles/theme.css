@@ -1,0 +1,274 @@
+/* Edumark - Premium educational resource styles */
+:root {
+  --primary-color: #3b82f6;
+  --primary-dark: #2563eb;
+  --bg-color: #f8fafc;
+  --text-color: #1e293b;
+  --text-muted: #64748b;
+  --border-color: #e2e8f0;
+
+  --card-bg: #ffffff;
+  --didyouknow-bg: #eff6ff;
+  --didyouknow-border: #bfdbfe;
+  --warning-bg: #fff7ed;
+  --warning-border: #ffedd5;
+  --hint-bg: #f0fdf4;
+  --hint-border: #bbf7d0;
+  --solution-bg: #faf5ff;
+  --solution-border: #f3e8ff;
+  --reflection-bg: #f5f3ff;
+  --reflection-border: #edd9ff;
+  --activity-bg: #fff1f2;
+  --activity-border: #ffe4e6;
+  --note-bg: #f8fafc;
+  --note-border: #cbd5e1;
+}
+
+body {
+  font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+  line-height: 1.6;
+  color: var(--text-color);
+  background-color: var(--bg-color);
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+header.edu-header {
+  margin-bottom: 3rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 2px solid var(--border-color);
+}
+
+h1.edu-title {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 0.5rem 0;
+  background: linear-gradient(to right, #2563eb, #3b82f6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.edu-meta {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
+.edu-section {
+  margin: 2.5rem 0 1.5rem 0;
+}
+
+.edu-section h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #1e293b;
+  border-left: 5px solid var(--primary-color);
+  padding-left: 0.75rem;
+  margin: 0;
+}
+
+p.edu-paragraph {
+  margin: 0 0 1.25rem 0;
+  font-size: 1.05rem;
+}
+
+/* PREMIUM DIDACTICAL CARDS */
+.edu-card {
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  margin: 1.5rem 0;
+  padding: 1.25rem 1.5rem;
+  background-color: var(--card-bg);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.edu-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.card-header h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0;
+  color: #0f172a;
+}
+
+.card-header .icon {
+  font-size: 1.5rem;
+}
+
+/* CARD THEMES */
+.edu-card.didyouknow { background-color: var(--didyouknow-bg); border-color: var(--didyouknow-border); }
+.edu-card.warning { background-color: var(--warning-bg); border-color: var(--warning-border); }
+.edu-card.hint { background-color: var(--hint-bg); border-color: var(--hint-border); }
+.edu-card.solution { background-color: var(--solution-bg); border-color: var(--solution-border); }
+.edu-card.reflection { background-color: var(--reflection-bg); border-color: var(--reflection-border); }
+.edu-card.activity { background-color: var(--activity-bg); border-color: var(--activity-border); }
+.edu-card.note { background-color: var(--note-bg); border-color: var(--note-border); }
+
+/* LISTS & CHECKLISTS */
+ul.edu-list {
+  margin: 0 0 1.25rem 1.5rem;
+  padding: 0;
+}
+
+li.edu-list-item {
+  margin-bottom: 0.5rem;
+  font-size: 1.05rem;
+}
+
+li.checklist-item {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: -1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+li.checklist-item input[type="checkbox"] {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: var(--primary-color);
+  cursor: not-allowed;
+}
+
+/* CODE BLOCKS */
+pre.edu-code {
+  background-color: #0f172a;
+  color: #f8fafc;
+  padding: 1.25rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  font-size: 0.95rem;
+  margin: 1.5rem 0;
+  border: 1px solid #1e293b;
+}
+
+code.edu-inline-code {
+  font-family: 'Fira Code', Consolas, monospace;
+  font-size: 0.9rem;
+  background-color: #f1f5f9;
+  color: #0f172a;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
+/* QUESTION BLOCKS */
+.edu-question {
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin: 2rem 0;
+  background-color: #ffffff;
+}
+
+.edu-question-prompt {
+  font-weight: 700;
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+  color: #0f172a;
+}
+
+.edu-question-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.edu-question-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-color);
+}
+
+.edu-question-option.correct {
+  border-color: #86efac;
+  background-color: #f0fdf4;
+}
+
+.edu-question-option input[type="checkbox"],
+.edu-question-option input[type="radio"] {
+  width: 1.2rem;
+  height: 1.2rem;
+  accent-color: var(--primary-color);
+}
+
+.edu-explanation {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--border-color);
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+/* GEOMETRIC TABLES */
+table.edu-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 2rem 0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);
+}
+
+table.edu-table th, 
+table.edu-table td {
+  border: 1px solid var(--border-color);
+  padding: 0.85rem 1.15rem;
+  font-size: 1rem;
+  text-align: left;
+}
+
+table.edu-table th,
+table.edu-table td.header {
+  background-color: #f1f5f9;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+table.edu-table tr:nth-child(even) {
+  background-color: #fafbfd;
+}
+
+/* RUBRIC TABLES SPECIFIC STYLING */
+table.edu-table.rubric {
+  border: 2px solid #6366f1;
+}
+table.edu-table.rubric th {
+  background-color: #e0e7ff;
+  color: #312e81;
+}
+
+/* PRINT AND DARK MODE */
+@media print {
+  body {
+    background-color: #ffffff;
+    color: #000000;
+    max-width: 100%;
+    padding: 0;
+  }
+  .edu-card {
+    box-shadow: none !important;
+    page-break-inside: avoid;
+  }
+}

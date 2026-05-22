@@ -1,0 +1,18 @@
+{
+  "name": "@edumark/cli",
+  "version": "1.0.0",
+  "description": "CLI tool for compiling, linting and building Edumark files",
+  "main": "dist/cli.js",
+  "bin": {
+    "edumark": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@edumark/shared": "*",
+    "@edumark/parser": "*",
+    "@edumark/renderer-html": "*",
+    "commander": "^12.0.0"
+  }
+}

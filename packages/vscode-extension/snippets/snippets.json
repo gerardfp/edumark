@@ -1,0 +1,52 @@
+{
+  "Multiple Choice Question": {
+    "prefix": "qmc",
+    "body": [
+      "@question type=multiple-choice",
+      "${1:Pregunta o enunciado...}",
+      "",
+      "- [ ] ${2:Opción incorrecta}",
+      "- [x] ${3:Opción correcta}",
+      "- [ ] ${4:Opción incorrecta}",
+      "",
+      "@solution",
+      "${5:Explicación de la solución...}",
+      "@end",
+      "@end"
+    ],
+    "description": "Inserta una pregunta tipo test interactiva de selección múltiple con solución."
+  },
+  "Rubric": {
+    "prefix": "rub",
+    "body": [
+      "@rubric ${1:Título de la rúbrica}",
+      "",
+      "|--------------------|--------------------|--------------------|",
+      "| Criterio           | Excelente          | A mejorar          |",
+      "|--------------------|--------------------|--------------------|",
+      "| ${2:Criterio 1}    | ${3:Excelente...}  | ${4:A mejorar...}  |",
+      "|--------------------|--------------------|--------------------|",
+      "",
+      "@end"
+    ],
+    "description": "Inserta un bloque de rúbrica de evaluación con tabla geométrica vacía."
+  },
+  "Did You Know": {
+    "prefix": "dyk",
+    "body": [
+      "@didyouknow ${1:Título opcional}",
+      "${2:Contenido interesante...}",
+      "@end"
+    ],
+    "description": "Inserta una tarjeta didáctica '¿Sabías que...?'."
+  },
+  "Warning": {
+    "prefix": "warn",
+    "body": [
+      "@warning ${1:Título opcional}",
+      "${2:Contenido de alerta o atención...}",
+      "@end"
+    ],
+    "description": "Inserta una tarjeta didáctica de atención/alerta."
+  }
+}

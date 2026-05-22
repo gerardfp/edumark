@@ -1,0 +1,14 @@
+{
+  "name": "@edumark/parser",
+  "version": "1.0.0",
+  "description": "Lexer and Parser for Edumark educational language",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@edumark/shared": "*",
+    "@edumark/table-engine": "*"
+  }
+}

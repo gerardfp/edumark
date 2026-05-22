@@ -1,0 +1,88 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Edumark",
+  "scopeName": "source.did",
+  "patterns": [
+    { "include": "#frontmatter" },
+    { "include": "#comments" },
+    { "include": "#directives" },
+    { "include": "#tables" },
+    { "include": "#inline-formatting" }
+  ],
+  "repository": {
+    "frontmatter": {
+      "begin": "^---$",
+      "end": "^---$",
+      "beginCaptures": {
+        "0": { "name": "meta.separator.markdown" }
+      },
+      "endCaptures": {
+        "0": { "name": "meta.separator.markdown" }
+      },
+      "patterns": [
+        {
+          "match": "^\\s*([a-zA-Z0-9_\\-]+)\\s*:\\s*(.*)$",
+          "captures": {
+            "1": { "name": "support.type.property-name.json" },
+            "2": { "name": "string.unquoted.yaml" }
+          }
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "match": "//.*$",
+          "name": "comment.line.double-slash"
+        }
+      ]
+    },
+    "directives": {
+      "patterns": [
+        {
+          "match": "^\\s*(@(section|didyouknow|warning|hint|solution|reflection|activity|note|question|rubric))\\b(.*)$",
+          "captures": {
+            "1": { "name": "keyword.control.directive" },
+            "3": { "name": "entity.name.section" }
+          }
+        },
+        {
+          "match": "^\\s*(@end(-[a-zA-Z0-9_\\-]+)?)\\b",
+          "name": "keyword.control.directive"
+        }
+      ]
+    },
+    "tables": {
+      "patterns": [
+        {
+          "match": "^\\s*(\\|[|\\-+\\s=_]*\\|)\\s*$",
+          "name": "punctuation.definition.table.border"
+        },
+        {
+          "match": "\\|",
+          "name": "punctuation.definition.table.separator"
+        }
+      ]
+    },
+    "inline-formatting": {
+      "patterns": [
+        {
+          "match": "\\*\\*(.*?)\\*\\*",
+          "name": "markup.bold"
+        },
+        {
+          "match": "\\*(.*?)\\*",
+          "name": "markup.italic"
+        },
+        {
+          "match": "`(.*?)`",
+          "name": "markup.inline.raw.string"
+        },
+        {
+          "match": "\\[(.*?)\\]\\((.*?)\\)",
+          "name": "markup.underline.link"
+        }
+      ]
+    }
+  }
+}

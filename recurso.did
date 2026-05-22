@@ -1,0 +1,72 @@
+---
+title: Introducción a la Criptografía y Seguridad
+author: Prof. Gerard Falco
+level: Grado Universitario / Profesional
+---
+
+@section Fundamentos de Seguridad
+
+Bienvenidos a esta lección sobre **criptografía moderna**. La seguridad de la información es un pilar fundamental en el diseño de sistemas distribuidos y aplicaciones de alta disponibilidad.
+
+@didyouknow El cifrado de curva elíptica (ECC)
+El cifrado de curva elíptica (ECC) ofrece el mismo nivel de seguridad que RSA pero con claves muchísimo más pequeñas. Por ejemplo, una clave ECC de **256 bits** ofrece una seguridad equivalente a una clave RSA de **3072 bits**, lo que reduce la carga computacional y el ancho de banda.
+@end
+
+@warning Peligro de Claves Débiles
+Nunca utilices funciones de hash inseguras como **MD5** o **SHA-1** para almacenar contraseñas en bases de datos. Estas funciones son vulnerables a ataques de colisión rápidos y descifrados por fuerza bruta mediante tablas arcoíris. Utiliza siempre algoritmos con sal y factor de coste variable como **bcrypt**, **scrypt** o **Argon2**.
+@end
+
+@section Algoritmos Comunes y Comparativa
+
+A continuación, se muestra una tabla comparativa geométrica avanzada que describe las características principales de los sistemas criptográficos más comunes:
+
+|---------------------|------------------------------|---------------------|
+| Algoritmo           | Tipo de Clave                | Seguridad           |
+|---------------------|------------------------------|---------------------|
+| AES                 | Simétrica (Clave compartida) | Excelente           |
+|---------------------|------------------------------|---------------------|
+| RSA                 | Asimétrica (Pública/Privada) | Robusta             |
+|---------------------|                              |                     |
+| ECC                 |                              | Líder en Eficiencia |
+|---------------------|------------------------------|---------------------|
+
+En la tabla anterior podemos observar cómo **RSA** y **ECC** comparten la característica de ser algoritmos de clave *Asimétrica (Pública/Privada)*, representados geométricamente mediante una celda combinada verticalmente (rowspan).
+
+@hint Elección del Algoritmo
+Para cifrar grandes volúmenes de datos estáticos (como archivos en disco o bases de datos), la mejor práctica consiste en utilizar un cifrado híbrido: cifrar los datos con un algoritmo simétrico rápido como **AES-256**, y proteger la clave simétrica usando un algoritmo asimétrico como **RSA** o **ECC**.
+@end
+
+@section Evaluación y Práctica
+
+Pon a prueba tus conocimientos con la siguiente pregunta de opción múltiple interactiva:
+
+@question type=multiple-choice
+¿Cuál de los siguientes algoritmos se considera actualmente seguro y recomendado para el hash y almacenamiento de contraseñas de usuarios?
+
+- [ ] MD5 con sal dinámica rápida
+- [ ] SHA-256 en bucle simple de 1000 iteraciones
+- [x] Argon2id configurado según las recomendaciones de OWASP
+- [ ] RSA con claves de 4096 bits
+
+@solution
+Argon2id es el algoritmo ganador en la Password Hashing Competition (PHC) y está diseñado específicamente para ser resistente a ataques de GPU y hardware especializado mediante el uso intensivo y configurable de memoria y tiempo. RSA es un cifrado asimétrico, no un algoritmo de hashing de contraseñas.
+@end
+@end
+
+Para evaluar tu comprensión práctica, utilizaremos la siguiente rúbrica detallada:
+
+@rubric Rúbrica de Criptografía Práctica
+
+|---------------------|-------------------------------------|-------------------------------------|
+| Criterio            | Nivel Excelente                     | Nivel a Mejorar                     |
+|---------------------|-------------------------------------|-------------------------------------|
+| Selección de Claves | Genera claves criptográficamente    | Utiliza contraseñas débiles o       |
+|                     | seguras usando un CSPRNG adecuado.  | valores predecibles sin entropía    |
+|                     |                                     | suficiente.                         |
+|---------------------|-------------------------------------|-------------------------------------|
+| Implementación Hash | Aplica Argon2id con sal de 16 bytes | Emplea SHA-1 o MD5 sin sal,         |
+|                     | y parámetros de memoria óptimos.    | haciendo las contraseñas            |
+|                     |                                     | vulnerables a tablas.               |
+|---------------------|-------------------------------------|-------------------------------------|
+
+@end
