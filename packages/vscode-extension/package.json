@@ -51,7 +51,7 @@
       },
       {
         "command": "edumark.tableTab",
-        "title": "Edumark: Autoformatear layout de tabla con Tabulador",
+        "title": "Edumark: Autoformatear layout de tabla con la tecla º",
         "category": "Edumark"
       }
     ],
@@ -63,7 +63,7 @@
       },
       {
         "command": "edumark.tableTab",
-        "key": "tab",
+        "key": "oem_5",
         "when": "editorTextFocus && editorLangId == edumark"
       }
     ],

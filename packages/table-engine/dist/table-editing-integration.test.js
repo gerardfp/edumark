@@ -49,7 +49,7 @@ function isCellSplittingRow(lineText) {
     for (const cell of colContents) {
         const trimmedCell = cell.trim();
         if (trimmedCell.length > 0) {
-            const isCompleteBorder = /^[-=_]{2,}$/.test(trimmedCell) && !cell.includes(' ');
+            const isCompleteBorder = /^[-=_]+$/.test(trimmedCell) && !cell.includes(' ');
             const isSplit = (/^[-=_]+/.test(trimmedCell) || /[-=_]+$/.test(trimmedCell)) && !isCompleteBorder;
             if (isSplit) {
                 hasSplitDash = true;
@@ -82,7 +82,7 @@ function isPartialBorderRow(text) {
     return false;
 }
 function loadTestCases() {
-    const filePath = path.join(__dirname, '../../../table_editing');
+    const filePath = path.join(__dirname, '../../../tests_table_layout_editing');
     const fileContent = fs.readFileSync(filePath, 'utf-8');
     const lines = fileContent.split(/\r?\n/);
     const cases = [];
@@ -132,6 +132,108 @@ function loadTestCases() {
     }
     return cases;
 }
+function projectNewColumns(tableLines, currentLineIdx) {
+    const currentLineText = tableLines[currentLineIdx];
+    if (!currentLineText)
+        return tableLines;
+    // 1. Find pipes in the edited line
+    const editPipes = [];
+    for (let c = 0; c < currentLineText.length; c++) {
+        if (currentLineText[c] === '|' || currentLineText[c] === '+') {
+            editPipes.push(c);
+        }
+    }
+    if (editPipes.length < 2)
+        return tableLines;
+    // 2. Find stable pipes from other rows
+    const stableVLinesSet = new Set();
+    for (let l = 0; l < tableLines.length; l++) {
+        if (l === currentLineIdx)
+            continue;
+        const lineText = tableLines[l];
+        for (let c = 0; c < lineText.length; c++) {
+            if (lineText[c] === '|') {
+                stableVLinesSet.add(c);
+            }
+        }
+    }
+    const stableVLines = Array.from(stableVLinesSet).sort((a, b) => a - b);
+    if (stableVLines.length < 2)
+        return tableLines;
+    // 3. Check if we added columns.
+    if (editPipes.length <= stableVLines.length) {
+        return tableLines;
+    }
+    // 4. Map stableVLines to editPipes.
+    const mapping = new Map();
+    mapping.set(0, 0); // stable index -> edit index
+    mapping.set(stableVLines.length - 1, editPipes.length - 1);
+    for (let i = 1; i < stableVLines.length - 1; i++) {
+        const sVal = stableVLines[i];
+        let closestIdx = 1;
+        let minDiff = Infinity;
+        for (let j = 1; j < editPipes.length - 1; j++) {
+            const diff = Math.abs(sVal - editPipes[j]);
+            if (diff < minDiff) {
+                minDiff = diff;
+                closestIdx = j;
+            }
+            else if (diff === minDiff) {
+                if (i >= stableVLines.length / 2) {
+                    closestIdx = j;
+                }
+            }
+        }
+        mapping.set(i, closestIdx);
+    }
+    // 5. For each stable column interval [i, i + 1], identify if there are any new pipes in editPipes
+    // between mapping.get(i) and mapping.get(i + 1).
+    const insertions = [];
+    for (let i = 0; i < stableVLines.length - 1; i++) {
+        const startEditIdx = mapping.get(i);
+        const endEditIdx = mapping.get(i + 1);
+        if (endEditIdx > startEditIdx + 1) {
+            const stableColWidth = stableVLines[i + 1] - stableVLines[i] - 1;
+            for (let k = startEditIdx + 1; k < endEditIdx; k++) {
+                const newPipePos = editPipes[k];
+                const distFromLeft = newPipePos - editPipes[startEditIdx] - 1;
+                const relPos = Math.min(distFromLeft, stableColWidth);
+                insertions.push({ colIdx: i, relPos });
+            }
+        }
+    }
+    if (insertions.length === 0)
+        return tableLines;
+    // Sort insertions in descending order of colIdx and relPos to avoid shifting indices
+    insertions.sort((a, b) => {
+        if (a.colIdx !== b.colIdx)
+            return b.colIdx - a.colIdx;
+        return b.relPos - a.relPos;
+    });
+    // 6. Apply insertions to all other rows
+    const newTableLines = [...tableLines];
+    for (let l = 0; l < tableLines.length; l++) {
+        if (l === currentLineIdx)
+            continue;
+        let lineText = tableLines[l];
+        const rowPipes = [];
+        for (let c = 0; c < lineText.length; c++) {
+            if (lineText[c] === '|') {
+                rowPipes.push(c);
+            }
+        }
+        if (rowPipes.length < stableVLines.length) {
+            continue;
+        }
+        for (const inst of insertions) {
+            const leftPipeIdx = rowPipes[inst.colIdx];
+            const insertIdx = leftPipeIdx + 1 + inst.relPos;
+            lineText = lineText.substring(0, insertIdx) + '|' + lineText.substring(insertIdx);
+        }
+        newTableLines[l] = lineText;
+    }
+    return newTableLines;
+}
 (0, vitest_1.describe)('Table Layout Editing Integration Tests', () => {
     const testCases = loadTestCases();
     console.log("LOADED TEST CASES:", JSON.stringify(testCases, null, 2));
@@ -150,8 +252,8 @@ function loadTestCases() {
             if (currentLineIdx === -1) {
                 currentLineIdx = 0;
             }
-            const beforeText = beforeLines[currentLineIdx];
-            const addText = addLines[currentLineIdx];
+            const beforeText = beforeLines[currentLineIdx] || '';
+            const addText = addLines[currentLineIdx] || '';
             let isLeftColumnAddition = false;
             let isRightColumnAddition = false;
             const firstPipeInAdd = addText.indexOf('|');
@@ -230,6 +332,7 @@ function loadTestCases() {
                     tableLines.push(originalLine);
                 }
             }
+            tableLines = projectNewColumns(tableLines, currentLineIdx);
             // Calculate stableVLines by emulating the active document state, skipping the current modified line
             const stableVLinesSet = new Set();
             for (let l = 0; l < tableLines.length; l++) {
@@ -336,11 +439,9 @@ function loadTestCases() {
                 }
             }
             tableLines = updatedTableLines;
-            if (idx === 11) {
-                console.log("DEBUG TABLE LINES:", JSON.stringify(tableLines, null, 2));
-            }
             const tableStr = tableLines.join('\n');
-            const tableNode = (0, table_parser_js_1.parseGeometricTable)(tableStr);
+            let tableNode = (0, table_parser_js_1.parseGeometricTable)(tableStr);
+            tableNode = (0, table_formatter_js_1.simplifyTable)(tableNode);
             const formatted = (0, table_formatter_js_1.formatGeometricTable)(tableNode);
             const expected = tc.after.join('\n');
             (0, vitest_1.expect)(formatted).toBe(expected);

@@ -58,6 +58,21 @@ export function activate(context: vscode.ExtensionContext) {
   let currentFormattedTable: string | undefined = undefined;
   let bufferedChanges: { range: vscode.Range; text: string }[] = [];
   let debounceTimer: NodeJS.Timeout | undefined = undefined;
+  let ignoreNextChangesCount = 0;
+
+  async function applyWorkspaceEdit(workspaceEdit: vscode.WorkspaceEdit): Promise<boolean> {
+    ignoreNextChangesCount++;
+    try {
+      const success = await vscode.workspace.applyEdit(workspaceEdit);
+      if (!success) {
+        ignoreNextChangesCount--;
+      }
+      return success;
+    } catch (e) {
+      ignoreNextChangesCount--;
+      throw e;
+    }
+  }
 
   async function formatAllTablesInDocument(document: vscode.TextDocument) {
     logToFile(`formatAllTablesInDocument called for ${document.fileName}, languageId: ${document.languageId}, isFormatting: ${isFormatting}`);
@@ -138,7 +153,7 @@ export function activate(context: vscode.ExtensionContext) {
         const { range, formatted } = tablesToReplace[i];
         workspaceEdit.replace(document.uri, range, formatted);
       }
-      const success = await vscode.workspace.applyEdit(workspaceEdit);
+      const success = await applyWorkspaceEdit(workspaceEdit);
       logToFile(`workspace.applyEdit success: ${success}`);
     } catch (err: any) {
       logToFile(`Error pre-formatting tables: ${err.message}`);
@@ -201,7 +216,7 @@ export function activate(context: vscode.ExtensionContext) {
     const tableStr = tableLines.join('\n');
     let tableNode;
     try {
-      tableNode = parseGeometricTable(tableStr);
+      tableNode = parseGeometricTable(tableStr, false, true);
     } catch (e) {
       return;
     }
@@ -363,6 +378,10 @@ export function activate(context: vscode.ExtensionContext) {
       return;
     }
 
+    if (formattedTable === tableStr) {
+      return;
+    }
+
     logToFile(`runLiveFormatting: table formatted. Length: ${formattedTable.length}`);
 
     // 3. Apply the edit
@@ -378,7 +397,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       const workspaceEdit = new vscode.WorkspaceEdit();
       workspaceEdit.replace(document.uri, range, formattedTable);
-      success = await vscode.workspace.applyEdit(workspaceEdit);
+      success = await applyWorkspaceEdit(workspaceEdit);
       logToFile(`runLiveFormatting: workspace.applyEdit success: ${success}`);
     } catch (err: any) {
       logToFile(`Error applying live format edit: ${err.message}`);
@@ -397,7 +416,7 @@ export function activate(context: vscode.ExtensionContext) {
           const bufferEdit = new vscode.WorkspaceEdit();
           bufferEdit.insert(document.uri, currentEditor.selection.active, textToInsert);
           isApplyingExtensionEdit = true;
-          await vscode.workspace.applyEdit(bufferEdit);
+          await applyWorkspaceEdit(bufferEdit);
         } catch (e: any) {
           logToFile(`Error writing buffered changes: ${e.message}`);
           console.error('Error writing buffered changes:', e);
@@ -714,7 +733,7 @@ export function activate(context: vscode.ExtensionContext) {
     const tableStr = tableLines.join('\n');
     let tableNode;
     try {
-      tableNode = parseGeometricTable(tableStr);
+      tableNode = parseGeometricTable(tableStr, false, false);
     } catch (e) {
       return;
     }
@@ -735,7 +754,7 @@ export function activate(context: vscode.ExtensionContext) {
 
           const workspaceEdit = new vscode.WorkspaceEdit();
           workspaceEdit.replace(document.uri, range, newTable);
-          success = await vscode.workspace.applyEdit(workspaceEdit);
+          success = await applyWorkspaceEdit(workspaceEdit);
         } catch (err: any) {
           logToFile(`Error creating new 1x1 table in layoutTab: ${err.message}`);
         } finally {
@@ -770,7 +789,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       const workspaceEdit = new vscode.WorkspaceEdit();
       workspaceEdit.replace(document.uri, range, formattedTable);
-      success = await vscode.workspace.applyEdit(workspaceEdit);
+      success = await applyWorkspaceEdit(workspaceEdit);
     } catch (err: any) {
       logToFile(`Error applying live format edit (layout Tab): ${err.message}`);
     } finally {
@@ -845,6 +864,11 @@ export function activate(context: vscode.ExtensionContext) {
       updateWebview(event.document);
     }
 
+    if (ignoreNextChangesCount > 0) {
+      ignoreNextChangesCount--;
+      return;
+    }
+
     if (isApplyingExtensionEdit) {
       return;
     }
@@ -860,6 +884,32 @@ export function activate(context: vscode.ExtensionContext) {
     const activeEditor = vscode.window.activeTextEditor;
     if (!activeEditor || event.document !== activeEditor.document) return;
     if (activeEditor.document.languageId !== 'edumark' && !activeEditor.document.fileName.endsWith('.did')) return;
+
+    // Only auto-resize/format in real-time when:
+    // 1. Content is inserted or deleted due to keyboard typing, spaces, tabs, enters, backspace, delete, paste or cut.
+    // 2. We are NOT undergoing an undo/redo operation (to preserve VS Code undo/redo stack).
+    if (event.reason === vscode.TextDocumentChangeReason.Undo || event.reason === vscode.TextDocumentChangeReason.Redo) {
+      return;
+    }
+
+    if (event.contentChanges.length === 0) {
+      return;
+    }
+
+    const hasTableChange = event.contentChanges.some(change => {
+      const startLine = change.range.start.line;
+      const endLine = Math.min(event.document.lineCount - 1, change.range.end.line + (change.text.split('\n').length - 1));
+      for (let l = startLine; l <= endLine; l++) {
+        if (event.document.lineAt(l).text.trim().startsWith('|')) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (!hasTableChange) {
+      return;
+    }
 
     if (debounceTimer) {
       clearTimeout(debounceTimer);
@@ -1057,7 +1107,7 @@ export function activate(context: vscode.ExtensionContext) {
     const tableStr = tableLines.join('\n');
     let tableNode;
     try {
-      tableNode = parseGeometricTable(tableStr);
+      tableNode = parseGeometricTable(tableStr, false, true);
     } catch (e) {
       await vscode.commands.executeCommand('type', { text: '\n' });
       return;
@@ -1206,7 +1256,7 @@ export function activate(context: vscode.ExtensionContext) {
       isApplyingExtensionEdit = true;
       const workspaceEdit = new vscode.WorkspaceEdit();
       workspaceEdit.replace(document.uri, range, formattedTable);
-      success = await vscode.workspace.applyEdit(workspaceEdit);
+      success = await applyWorkspaceEdit(workspaceEdit);
       logToFile(`tableEnterCommand: workspace.applyEdit success: ${success}`);
     } catch (err: any) {
       logToFile(`Error applying tableEnter edit: ${err.message}`);
@@ -1254,7 +1304,7 @@ export function activate(context: vscode.ExtensionContext) {
   const tableTabCommand = vscode.commands.registerCommand('edumark.tableTab', async () => {
     const activeEditor = vscode.window.activeTextEditor;
     if (!activeEditor || activeEditor.document.languageId !== 'edumark') {
-      await vscode.commands.executeCommand('tab');
+      await vscode.commands.executeCommand('type', { text: 'º' });
       return;
     }
 
@@ -1280,7 +1330,7 @@ export function activate(context: vscode.ExtensionContext) {
     if (cond1 || cond2 || cond3 || cond4) {
       await runLayoutFormatting(activeEditor, document);
     } else {
-      await vscode.commands.executeCommand('tab');
+      await vscode.commands.executeCommand('type', { text: 'º' });
     }
   });
 

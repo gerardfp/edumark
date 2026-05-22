@@ -182,7 +182,8 @@ const table_formatter_js_1 = require("./table-formatter.js");
 |---|---|
 `.trim();
         const parsed = (0, table_parser_js_1.parseGeometricTable)(tableStr);
-        const formatted = (0, table_formatter_js_1.formatGeometricTable)(parsed);
+        const simplified = (0, table_formatter_js_1.simplifyTable)(parsed);
+        const formatted = (0, table_formatter_js_1.formatGeometricTable)(simplified);
         const expected = `
 |---|
 | A |
@@ -199,7 +200,8 @@ const table_formatter_js_1 = require("./table-formatter.js");
 |---|---|---|
 `.trim();
         const parsed = (0, table_parser_js_1.parseGeometricTable)(tableStr);
-        const formatted = (0, table_formatter_js_1.formatGeometricTable)(parsed);
+        const simplified = (0, table_formatter_js_1.simplifyTable)(parsed);
+        const formatted = (0, table_formatter_js_1.formatGeometricTable)(simplified);
         const expected = `
 |---|---|
 | A     |
@@ -208,6 +210,21 @@ const table_formatter_js_1 = require("./table-formatter.js");
 |---|---|
 `.trim();
         (0, vitest_1.expect)(formatted).toBe(expected);
+    });
+    (0, vitest_1.it)('should preserve empty lines in cell content when preserveEmptyLines is true', () => {
+        const tableStr = `
+|-------|
+|       |
+|       |
+|       |
+|-------|
+`.trim();
+        // Default parser behavior: trim empty lines
+        const parsedDefault = (0, table_parser_js_1.parseGeometricTable)(tableStr, false, false);
+        (0, vitest_1.expect)(parsedDefault.cells[0].content).toEqual([]);
+        // preserveEmptyLines: true -> keep empty lines
+        const parsedPreserved = (0, table_parser_js_1.parseGeometricTable)(tableStr, false, true);
+        (0, vitest_1.expect)(parsedPreserved.cells[0].content).toEqual(['', '', '']);
     });
 });
 //# sourceMappingURL=table-engine.test.js.map

@@ -49,7 +49,6 @@ function simplifyTable(table) {
     };
 }
 function formatGeometricTable(table) {
-    table = simplifyTable(table);
     if (table.rowsCount === 0 || table.colsCount === 0 || table.cells.length === 0) {
         return '';
     }

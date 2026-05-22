@@ -82,6 +82,21 @@ function activate(context) {
     let currentFormattedTable = undefined;
     let bufferedChanges = [];
     let debounceTimer = undefined;
+    let ignoreNextChangesCount = 0;
+    async function applyWorkspaceEdit(workspaceEdit) {
+        ignoreNextChangesCount++;
+        try {
+            const success = await vscode.workspace.applyEdit(workspaceEdit);
+            if (!success) {
+                ignoreNextChangesCount--;
+            }
+            return success;
+        }
+        catch (e) {
+            ignoreNextChangesCount--;
+            throw e;
+        }
+    }
     async function formatAllTablesInDocument(document) {
         logToFile(`formatAllTablesInDocument called for ${document.fileName}, languageId: ${document.languageId}, isFormatting: ${isFormatting}`);
         if (isFormatting)
@@ -154,7 +169,7 @@ function activate(context) {
                 const { range, formatted } = tablesToReplace[i];
                 workspaceEdit.replace(document.uri, range, formatted);
             }
-            const success = await vscode.workspace.applyEdit(workspaceEdit);
+            const success = await applyWorkspaceEdit(workspaceEdit);
             logToFile(`workspace.applyEdit success: ${success}`);
         }
         catch (err) {
@@ -210,7 +225,7 @@ function activate(context) {
         const tableStr = tableLines.join('\n');
         let tableNode;
         try {
-            tableNode = (0, table_engine_1.parseGeometricTable)(tableStr);
+            tableNode = (0, table_engine_1.parseGeometricTable)(tableStr, false, true);
         }
         catch (e) {
             return;
@@ -354,6 +369,9 @@ function activate(context) {
             logToFile(`Error formatting table in runLiveFormatting: ${e.message}`);
             return;
         }
+        if (formattedTable === tableStr) {
+            return;
+        }
         logToFile(`runLiveFormatting: table formatted. Length: ${formattedTable.length}`);
         // 3. Apply the edit
         let success = false;
@@ -364,7 +382,7 @@ function activate(context) {
             const range = new vscode.Range(new vscode.Position(startLineIdx, 0), new vscode.Position(endLineIdx, document.lineAt(endLineIdx).text.length));
             const workspaceEdit = new vscode.WorkspaceEdit();
             workspaceEdit.replace(document.uri, range, formattedTable);
-            success = await vscode.workspace.applyEdit(workspaceEdit);
+            success = await applyWorkspaceEdit(workspaceEdit);
             logToFile(`runLiveFormatting: workspace.applyEdit success: ${success}`);
         }
         catch (err) {
@@ -384,7 +402,7 @@ function activate(context) {
                     const bufferEdit = new vscode.WorkspaceEdit();
                     bufferEdit.insert(document.uri, currentEditor.selection.active, textToInsert);
                     isApplyingExtensionEdit = true;
-                    await vscode.workspace.applyEdit(bufferEdit);
+                    await applyWorkspaceEdit(bufferEdit);
                 }
                 catch (e) {
                     logToFile(`Error writing buffered changes: ${e.message}`);
@@ -685,7 +703,7 @@ function activate(context) {
         const tableStr = tableLines.join('\n');
         let tableNode;
         try {
-            tableNode = (0, table_engine_1.parseGeometricTable)(tableStr);
+            tableNode = (0, table_engine_1.parseGeometricTable)(tableStr, false, false);
         }
         catch (e) {
             return;
@@ -701,7 +719,7 @@ function activate(context) {
                     const range = new vscode.Range(new vscode.Position(currentLineIdx, 0), new vscode.Position(currentLineIdx, currentLineText.length));
                     const workspaceEdit = new vscode.WorkspaceEdit();
                     workspaceEdit.replace(document.uri, range, newTable);
-                    success = await vscode.workspace.applyEdit(workspaceEdit);
+                    success = await applyWorkspaceEdit(workspaceEdit);
                 }
                 catch (err) {
                     logToFile(`Error creating new 1x1 table in layoutTab: ${err.message}`);
@@ -732,7 +750,7 @@ function activate(context) {
             const range = new vscode.Range(new vscode.Position(startLineIdx, 0), new vscode.Position(endLineIdx, document.lineAt(endLineIdx).text.length));
             const workspaceEdit = new vscode.WorkspaceEdit();
             workspaceEdit.replace(document.uri, range, formattedTable);
-            success = await vscode.workspace.applyEdit(workspaceEdit);
+            success = await applyWorkspaceEdit(workspaceEdit);
         }
         catch (err) {
             logToFile(`Error applying live format edit (layout Tab): ${err.message}`);
@@ -800,6 +818,10 @@ function activate(context) {
         if (previewPanel && event.document === vscode.window.activeTextEditor?.document) {
             updateWebview(event.document);
         }
+        if (ignoreNextChangesCount > 0) {
+            ignoreNextChangesCount--;
+            return;
+        }
         if (isApplyingExtensionEdit) {
             return;
         }
@@ -815,6 +837,28 @@ function activate(context) {
             return;
         if (activeEditor.document.languageId !== 'edumark' && !activeEditor.document.fileName.endsWith('.did'))
             return;
+        // Only auto-resize/format in real-time when:
+        // 1. Content is inserted or deleted due to keyboard typing, spaces, tabs, enters, backspace, delete, paste or cut.
+        // 2. We are NOT undergoing an undo/redo operation (to preserve VS Code undo/redo stack).
+        if (event.reason === vscode.TextDocumentChangeReason.Undo || event.reason === vscode.TextDocumentChangeReason.Redo) {
+            return;
+        }
+        if (event.contentChanges.length === 0) {
+            return;
+        }
+        const hasTableChange = event.contentChanges.some(change => {
+            const startLine = change.range.start.line;
+            const endLine = Math.min(event.document.lineCount - 1, change.range.end.line + (change.text.split('\n').length - 1));
+            for (let l = startLine; l <= endLine; l++) {
+                if (event.document.lineAt(l).text.trim().startsWith('|')) {
+                    return true;
+                }
+            }
+            return false;
+        });
+        if (!hasTableChange) {
+            return;
+        }
         if (debounceTimer) {
             clearTimeout(debounceTimer);
         }
@@ -984,7 +1028,7 @@ function activate(context) {
         const tableStr = tableLines.join('\n');
         let tableNode;
         try {
-            tableNode = (0, table_engine_1.parseGeometricTable)(tableStr);
+            tableNode = (0, table_engine_1.parseGeometricTable)(tableStr, false, true);
         }
         catch (e) {
             await vscode.commands.executeCommand('type', { text: '\n' });
@@ -1106,7 +1150,7 @@ function activate(context) {
             isApplyingExtensionEdit = true;
             const workspaceEdit = new vscode.WorkspaceEdit();
             workspaceEdit.replace(document.uri, range, formattedTable);
-            success = await vscode.workspace.applyEdit(workspaceEdit);
+            success = await applyWorkspaceEdit(workspaceEdit);
             logToFile(`tableEnterCommand: workspace.applyEdit success: ${success}`);
         }
         catch (err) {
@@ -1150,7 +1194,7 @@ function activate(context) {
     const tableTabCommand = vscode.commands.registerCommand('edumark.tableTab', async () => {
         const activeEditor = vscode.window.activeTextEditor;
         if (!activeEditor || activeEditor.document.languageId !== 'edumark') {
-            await vscode.commands.executeCommand('tab');
+            await vscode.commands.executeCommand('type', { text: 'º' });
             return;
         }
         const document = activeEditor.document;
@@ -1170,7 +1214,7 @@ function activate(context) {
             await runLayoutFormatting(activeEditor, document);
         }
         else {
-            await vscode.commands.executeCommand('tab');
+            await vscode.commands.executeCommand('type', { text: 'º' });
         }
     });
     context.subscriptions.push(formattingProvider);
@@ -1216,7 +1260,7 @@ function isCellSplittingRow(lineText) {
     for (const cell of colContents) {
         const trimmedCell = cell.trim();
         if (trimmedCell.length > 0) {
-            const isCompleteBorder = /^[-=_]{2,}$/.test(trimmedCell) && !cell.includes(' ');
+            const isCompleteBorder = /^[-=_]+$/.test(trimmedCell) && !cell.includes(' ');
             const isSplit = (/^[-=_]+/.test(trimmedCell) || /[-=_]+$/.test(trimmedCell)) && !isCompleteBorder;
             if (isSplit) {
                 hasSplitDash = true;

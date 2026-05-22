@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseGeometricTable } from './table-parser.js';
-import { formatGeometricTable } from './table-formatter.js';
+import { formatGeometricTable, simplifyTable } from './table-formatter.js';
 
 describe('Table Engine - Geometric Parser', () => {
   it('should parse a simple 2x2 ASCII table', () => {
@@ -216,7 +216,8 @@ describe('Table Engine - Formatter', () => {
 `.trim();
 
     const parsed = parseGeometricTable(tableStr);
-    const formatted = formatGeometricTable(parsed);
+    const simplified = simplifyTable(parsed);
+    const formatted = formatGeometricTable(simplified);
 
     const expected = `
 |---|
@@ -237,7 +238,8 @@ describe('Table Engine - Formatter', () => {
 `.trim();
 
     const parsed = parseGeometricTable(tableStr);
-    const formatted = formatGeometricTable(parsed);
+    const simplified = simplifyTable(parsed);
+    const formatted = formatGeometricTable(simplified);
 
     const expected = `
 |---|---|
@@ -249,4 +251,23 @@ describe('Table Engine - Formatter', () => {
 
     expect(formatted).toBe(expected);
   });
+
+  it('should preserve empty lines in cell content when preserveEmptyLines is true', () => {
+    const tableStr = `
+|-------|
+|       |
+|       |
+|       |
+|-------|
+`.trim();
+
+    // Default parser behavior: trim empty lines
+    const parsedDefault = parseGeometricTable(tableStr, false, false);
+    expect(parsedDefault.cells[0].content).toEqual([]);
+
+    // preserveEmptyLines: true -> keep empty lines
+    const parsedPreserved = parseGeometricTable(tableStr, false, true);
+    expect(parsedPreserved.cells[0].content).toEqual(['', '', '']);
+  });
 });
+

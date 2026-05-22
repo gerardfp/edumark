@@ -23,7 +23,7 @@ class DSU {
   }
 }
 
-export function parseGeometricTable(tableStr: string, isRubric = false): TableNode {
+export function parseGeometricTable(tableStr: string, isRubric = false, preserveEmptyLines = false): TableNode {
   // 1. Normalize lines and pad them to equal length
   const rawLines = tableStr.split(/\r?\n/).map(line => line.trimEnd());
   const lines = rawLines.filter(line => line.length > 0);
@@ -86,7 +86,12 @@ export function parseGeometricTable(tableStr: string, isRubric = false): TableNo
     const rEnd = hLines[j + 1] - 1;
 
     const activeBoundaries = new Set<number>();
-    for (let r = rStart; r <= rEnd; r++) {
+    if (rStart > rEnd) {
+      for (const v of vLines) {
+        activeBoundaries.add(v);
+      }
+    } else {
+      for (let r = rStart; r <= rEnd; r++) {
       const lineText = grid[r];
       const lineVLines: number[] = [];
       for (let c = 0; c < lineText.length; c++) {
@@ -133,6 +138,7 @@ export function parseGeometricTable(tableStr: string, isRubric = false): TableNo
         }
       }
     }
+  }
 
     for (let i = 0; i < colIntervalsCount - 1; i++) {
       const boundaryColVal = vLines[i + 1];
@@ -296,11 +302,13 @@ export function parseGeometricTable(tableStr: string, isRubric = false): TableNo
 
     // Trim spaces from content lines
     const finalContent = processedLines.map(line => line.trim());
-    while (finalContent.length > 0 && finalContent[finalContent.length - 1] === '') {
-      finalContent.pop();
-    }
-    while (finalContent.length > 0 && finalContent[0] === '') {
-      finalContent.shift();
+    if (!preserveEmptyLines) {
+      while (finalContent.length > 0 && finalContent[finalContent.length - 1] === '') {
+        finalContent.pop();
+      }
+      while (finalContent.length > 0 && finalContent[0] === '') {
+        finalContent.shift();
+      }
     }
 
     cells.push({

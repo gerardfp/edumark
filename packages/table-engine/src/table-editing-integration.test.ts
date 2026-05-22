@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { parseGeometricTable } from './table-parser.js';
-import { formatGeometricTable } from './table-formatter.js';
+import { formatGeometricTable, simplifyTable } from './table-formatter.js';
 
 function isCellSplittingRow(lineText: string): boolean {
   const trimmed = lineText.trim();
@@ -53,7 +53,7 @@ interface TestCase {
 }
 
 function loadTestCases(): TestCase[] {
-  const filePath = path.join(__dirname, '../../../table_editing');
+  const filePath = path.join(__dirname, '../../../tests_table_layout_editing');
   const fileContent = fs.readFileSync(filePath, 'utf-8');
   const lines = fileContent.split(/\r?\n/);
 
@@ -101,6 +101,114 @@ function loadTestCases(): TestCase[] {
   }
 
   return cases;
+}
+
+function projectNewColumns(tableLines: string[], currentLineIdx: number): string[] {
+  const currentLineText = tableLines[currentLineIdx];
+  if (!currentLineText) return tableLines;
+  
+  // 1. Find pipes in the edited line
+  const editPipes: number[] = [];
+  for (let c = 0; c < currentLineText.length; c++) {
+    if (currentLineText[c] === '|' || currentLineText[c] === '+') {
+      editPipes.push(c);
+    }
+  }
+  if (editPipes.length < 2) return tableLines;
+
+  // 2. Find stable pipes from other rows
+  const stableVLinesSet = new Set<number>();
+  for (let l = 0; l < tableLines.length; l++) {
+    if (l === currentLineIdx) continue;
+    const lineText = tableLines[l];
+    for (let c = 0; c < lineText.length; c++) {
+      if (lineText[c] === '|') {
+        stableVLinesSet.add(c);
+      }
+    }
+  }
+  const stableVLines = Array.from(stableVLinesSet).sort((a, b) => a - b);
+  if (stableVLines.length < 2) return tableLines;
+
+  // 3. Check if we added columns.
+  if (editPipes.length <= stableVLines.length) {
+    return tableLines;
+  }
+
+  // 4. Map stableVLines to editPipes.
+  const mapping = new Map<number, number>();
+  mapping.set(0, 0); // stable index -> edit index
+  mapping.set(stableVLines.length - 1, editPipes.length - 1);
+
+  for (let i = 1; i < stableVLines.length - 1; i++) {
+    const sVal = stableVLines[i];
+    let closestIdx = 1;
+    let minDiff = Infinity;
+    for (let j = 1; j < editPipes.length - 1; j++) {
+      const diff = Math.abs(sVal - editPipes[j]);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestIdx = j;
+      } else if (diff === minDiff) {
+        if (i >= stableVLines.length / 2) {
+          closestIdx = j;
+        }
+      }
+    }
+    mapping.set(i, closestIdx);
+  }
+
+  // 5. For each stable column interval [i, i + 1], identify if there are any new pipes in editPipes
+  // between mapping.get(i) and mapping.get(i + 1).
+  const insertions: { colIdx: number; relPos: number }[] = [];
+  for (let i = 0; i < stableVLines.length - 1; i++) {
+    const startEditIdx = mapping.get(i)!;
+    const endEditIdx = mapping.get(i + 1)!;
+    if (endEditIdx > startEditIdx + 1) {
+      const stableColWidth = stableVLines[i + 1] - stableVLines[i] - 1;
+      for (let k = startEditIdx + 1; k < endEditIdx; k++) {
+        const newPipePos = editPipes[k];
+        const distFromLeft = newPipePos - editPipes[startEditIdx] - 1;
+        const relPos = Math.min(distFromLeft, stableColWidth);
+        insertions.push({ colIdx: i, relPos });
+      }
+    }
+  }
+
+  if (insertions.length === 0) return tableLines;
+
+  // Sort insertions in descending order of colIdx and relPos to avoid shifting indices
+  insertions.sort((a, b) => {
+    if (a.colIdx !== b.colIdx) return b.colIdx - a.colIdx;
+    return b.relPos - a.relPos;
+  });
+
+  // 6. Apply insertions to all other rows
+  const newTableLines = [...tableLines];
+  for (let l = 0; l < tableLines.length; l++) {
+    if (l === currentLineIdx) continue;
+    let lineText = tableLines[l];
+    
+    const rowPipes: number[] = [];
+    for (let c = 0; c < lineText.length; c++) {
+      if (lineText[c] === '|') {
+        rowPipes.push(c);
+      }
+    }
+
+    if (rowPipes.length < stableVLines.length) {
+      continue;
+    }
+
+    for (const inst of insertions) {
+      const leftPipeIdx = rowPipes[inst.colIdx];
+      const insertIdx = leftPipeIdx + 1 + inst.relPos;
+      lineText = lineText.substring(0, insertIdx) + '|' + lineText.substring(insertIdx);
+    }
+    newTableLines[l] = lineText;
+  }
+
+  return newTableLines;
 }
 
 describe('Table Layout Editing Integration Tests', () => {
@@ -199,6 +307,8 @@ describe('Table Layout Editing Integration Tests', () => {
           tableLines.push(originalLine);
         }
       }
+
+      tableLines = projectNewColumns(tableLines, currentLineIdx);
 
       // Calculate stableVLines by emulating the active document state, skipping the current modified line
       const stableVLinesSet = new Set<number>();
@@ -315,7 +425,8 @@ describe('Table Layout Editing Integration Tests', () => {
       tableLines = updatedTableLines;
       const tableStr = tableLines.join('\n');
 
-      const tableNode = parseGeometricTable(tableStr);
+      let tableNode = parseGeometricTable(tableStr);
+      tableNode = simplifyTable(tableNode);
       const formatted = formatGeometricTable(tableNode);
       const expected = tc.after.join('\n');
       expect(formatted).toBe(expected);

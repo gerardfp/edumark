@@ -21,7 +21,7 @@ class DSU {
         }
     }
 }
-function parseGeometricTable(tableStr, isRubric = false) {
+function parseGeometricTable(tableStr, isRubric = false, preserveEmptyLines = false) {
     // 1. Normalize lines and pad them to equal length
     const rawLines = tableStr.split(/\r?\n/).map(line => line.trimEnd());
     const lines = rawLines.filter(line => line.length > 0);
@@ -73,28 +73,57 @@ function parseGeometricTable(tableStr, isRubric = false) {
         const rStart = hLines[j] + 1;
         const rEnd = hLines[j + 1] - 1;
         const activeBoundaries = new Set();
-        for (let r = rStart; r <= rEnd; r++) {
-            const lineText = grid[r];
-            const lineVLines = [];
-            for (let c = 0; c < lineText.length; c++) {
-                if (lineText[c] === '|') {
-                    lineVLines.push(c);
-                }
+        if (rStart > rEnd) {
+            for (const v of vLines) {
+                activeBoundaries.add(v);
             }
-            // Map each internal separator to the closest vLines index
-            for (let k = 1; k < lineVLines.length - 1; k++) {
-                const s = lineVLines[k];
-                if (vLines.length > 2) {
-                    let closestVal = vLines[1];
-                    let minDiff = Math.abs(s - vLines[1]);
-                    for (let idx = 2; idx < vLines.length - 1; idx++) {
-                        const diff = Math.abs(s - vLines[idx]);
-                        if (diff < minDiff) {
-                            minDiff = diff;
-                            closestVal = vLines[idx];
+        }
+        else {
+            for (let r = rStart; r <= rEnd; r++) {
+                const lineText = grid[r];
+                const lineVLines = [];
+                for (let c = 0; c < lineText.length; c++) {
+                    if (lineText[c] === '|') {
+                        lineVLines.push(c);
+                    }
+                }
+                if (lineVLines.length >= 2) {
+                    if (lineVLines.length >= vLines.length) {
+                        // Map internal separators to internal vLines only
+                        for (let idx = 1; idx < lineVLines.length - 1; idx++) {
+                            const s = lineVLines[idx];
+                            if (vLines.length > 2) {
+                                let closestVal = vLines[1];
+                                let minDiff = Math.abs(s - vLines[1]);
+                                for (let vIdx = 2; vIdx < vLines.length - 1; vIdx++) {
+                                    const diff = Math.abs(s - vLines[vIdx]);
+                                    if (diff < minDiff) {
+                                        minDiff = diff;
+                                        closestVal = vLines[vIdx];
+                                    }
+                                }
+                                activeBoundaries.add(closestVal);
+                            }
                         }
                     }
-                    activeBoundaries.add(closestVal);
+                    else {
+                        // Shorter row: map every separator to its closest vLines,
+                        // but activeBoundaries only cares about internal vLines (exclude vLines[0] and vLines[vLines.length - 1])
+                        for (const s of lineVLines) {
+                            let closestVal = vLines[0];
+                            let minDiff = Math.abs(s - vLines[0]);
+                            for (let vIdx = 1; vIdx < vLines.length; vIdx++) {
+                                const diff = Math.abs(s - vLines[vIdx]);
+                                if (diff < minDiff) {
+                                    minDiff = diff;
+                                    closestVal = vLines[vIdx];
+                                }
+                            }
+                            if (closestVal !== vLines[0] && closestVal !== vLines[vLines.length - 1]) {
+                                activeBoundaries.add(closestVal);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -162,21 +191,41 @@ function parseGeometricTable(tableStr, isRubric = false) {
                 let slice = '';
                 if (lineVLines.length >= 2) {
                     const boundaryPos = Array(vLines.length).fill(-1);
-                    boundaryPos[0] = lineVLines[0];
-                    boundaryPos[vLines.length - 1] = lineVLines[lineVLines.length - 1];
-                    // Map internal separators
-                    for (let k = 1; k < lineVLines.length - 1; k++) {
-                        const s = lineVLines[k];
-                        let closestIdx = 1;
-                        let minDiff = Math.abs(s - vLines[1]);
-                        for (let idx = 2; idx < vLines.length - 1; idx++) {
-                            const diff = Math.abs(s - vLines[idx]);
-                            if (diff < minDiff) {
-                                minDiff = diff;
-                                closestIdx = idx;
+                    if (lineVLines.length >= vLines.length) {
+                        // Full-length or longer row: map extremes to global extremes
+                        boundaryPos[0] = lineVLines[0];
+                        boundaryPos[vLines.length - 1] = lineVLines[lineVLines.length - 1];
+                        // Map internal separators to internal vLines
+                        for (let idx = 1; idx < lineVLines.length - 1; idx++) {
+                            const s = lineVLines[idx];
+                            if (vLines.length > 2) {
+                                let closestIdx = 1;
+                                let minDiff = Math.abs(s - vLines[1]);
+                                for (let vIdx = 2; vIdx < vLines.length - 1; vIdx++) {
+                                    const diff = Math.abs(s - vLines[vIdx]);
+                                    if (diff < minDiff) {
+                                        minDiff = diff;
+                                        closestIdx = vIdx;
+                                    }
+                                }
+                                boundaryPos[closestIdx] = s;
                             }
                         }
-                        boundaryPos[closestIdx] = s;
+                    }
+                    else {
+                        // Shorter row: map every separator to its closest vLines index
+                        for (const s of lineVLines) {
+                            let closestIdx = 0;
+                            let minDiff = Math.abs(s - vLines[0]);
+                            for (let vIdx = 1; vIdx < vLines.length; vIdx++) {
+                                const diff = Math.abs(s - vLines[vIdx]);
+                                if (diff < minDiff) {
+                                    minDiff = diff;
+                                    closestIdx = vIdx;
+                                }
+                            }
+                            boundaryPos[closestIdx] = s;
+                        }
                     }
                     const startPos = boundaryPos[minI];
                     const endPos = boundaryPos[maxI + 1];
@@ -226,11 +275,13 @@ function parseGeometricTable(tableStr, isRubric = false) {
         }
         // Trim spaces from content lines
         const finalContent = processedLines.map(line => line.trim());
-        while (finalContent.length > 0 && finalContent[finalContent.length - 1] === '') {
-            finalContent.pop();
-        }
-        while (finalContent.length > 0 && finalContent[0] === '') {
-            finalContent.shift();
+        if (!preserveEmptyLines) {
+            while (finalContent.length > 0 && finalContent[finalContent.length - 1] === '') {
+                finalContent.pop();
+            }
+            while (finalContent.length > 0 && finalContent[0] === '') {
+                finalContent.shift();
+            }
         }
         cells.push({
             id: `cell-${cellCounter++}`,

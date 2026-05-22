@@ -1,3 +1,3 @@
 import { TableNode } from '@edumark/shared';
-export declare function parseGeometricTable(tableStr: string, isRubric?: boolean): TableNode;
+export declare function parseGeometricTable(tableStr: string, isRubric?: boolean, preserveEmptyLines?: boolean): TableNode;
 //# sourceMappingURL=table-parser.d.ts.map

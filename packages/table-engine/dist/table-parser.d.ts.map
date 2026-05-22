@@ -1,1 +1,1 @@
-{"version":3,"file":"table-parser.d.ts","sourceRoot":"","sources":["../src/table-parser.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,SAAS,EAAa,MAAM,iBAAiB,CAAC;AAyBvD,wBAAgB,mBAAmB,CAAC,QAAQ,EAAE,MAAM,EAAE,QAAQ,UAAQ,GAAG,SAAS,CAyQjF"}
+{"version":3,"file":"table-parser.d.ts","sourceRoot":"","sources":["../src/table-parser.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,SAAS,EAAa,MAAM,iBAAiB,CAAC;AAyBvD,wBAAgB,mBAAmB,CAAC,QAAQ,EAAE,MAAM,EAAE,QAAQ,UAAQ,EAAE,kBAAkB,UAAQ,GAAG,SAAS,CAyT7G"}
