@@ -48,18 +48,17 @@ function isPartialBorderRow(text: string): boolean {
 
 interface TestCase {
   before: string[];
-  add: string[];
   after: string[];
 }
 
 function loadTestCases(): TestCase[] {
-  const filePath = path.join(__dirname, '../../../tests_table_layout_editing');
+  const filePath = path.join(__dirname, '../../../test_table_autoadjust');
   const fileContent = fs.readFileSync(filePath, 'utf-8');
   const lines = fileContent.split(/\r?\n/);
 
   const cases: TestCase[] = [];
   let currentCase: Partial<TestCase> = {};
-  let currentSection: 'before' | 'add' | 'after' | null = null;
+  let currentSection: 'before' | 'after' | null = null;
   let currentLines: string[] = [];
 
   for (let i = 0; i < lines.length; i++) {
@@ -70,12 +69,6 @@ function loadTestCases(): TestCase[] {
         currentCase = {};
       }
       currentSection = 'before';
-      currentLines = [];
-    } else if (line.startsWith('ADD')) {
-      if (currentSection && currentLines.length > 0) {
-        currentCase[currentSection] = currentLines;
-      }
-      currentSection = 'add';
       currentLines = [];
     } else if (line.startsWith('AFTER')) {
       if (currentSection && currentLines.length > 0) {
@@ -101,6 +94,44 @@ function loadTestCases(): TestCase[] {
   }
 
   return cases;
+}
+
+function findEditedLine(tableLines: string[]): number {
+  for (let i = 0; i < tableLines.length; i++) {
+    const line = tableLines[i].trim();
+    const firstPipe = line.indexOf('|');
+    if (firstPipe > 0 && /[-=_]/.test(line.substring(0, firstPipe))) {
+      return i;
+    }
+  }
+
+  for (let i = 0; i < tableLines.length; i++) {
+    const line = tableLines[i].trim();
+    const lastPipe = line.lastIndexOf('|');
+    if (lastPipe !== -1 && lastPipe < line.length - 1 && /[-=_]/.test(line.substring(lastPipe + 1))) {
+      return i;
+    }
+  }
+
+  for (let i = 0; i < tableLines.length; i++) {
+    const line = tableLines[i];
+    const parts = line.split('|');
+    if (parts.length >= 2) {
+      const colContents = parts.slice(1, parts.length - 1);
+      for (const cell of colContents) {
+        const trimmed = cell.trim();
+        const isCompleteBorder = /^[-=_]{2,}$/.test(trimmed) && !cell.includes(' ');
+        const hasSplitDash = trimmed.length > 0 &&
+          (/^[-=_]+/.test(trimmed) || /[-=_]+$/.test(trimmed)) &&
+          !isCompleteBorder;
+        if (hasSplitDash) {
+          return i;
+        }
+      }
+    }
+  }
+
+  return 0;
 }
 
 function projectNewColumns(tableLines: string[], currentLineIdx: number): string[] {
@@ -217,36 +248,26 @@ describe('Table Layout Editing Integration Tests', () => {
 
   testCases.forEach((tc, idx) => {
     it(`should format Case ${idx + 1} correctly`, () => {
-      const addLines = tc.add;
-      const beforeLines = tc.before;
+      const addLines = tc.before;
+      const currentLineIdx = findEditedLine(addLines);
 
-      // Find the modified line (the line that contains the added dash or differs from BEFORE)
-      let currentLineIdx = -1;
-      for (let i = 0; i < addLines.length; i++) {
-        if (addLines[i] !== beforeLines[i]) {
-          currentLineIdx = i;
-          break;
-        }
-      }
-      if (currentLineIdx === -1) {
-        currentLineIdx = 0;
-      }
-
-      const beforeText = beforeLines[currentLineIdx] || '';
       const addText = addLines[currentLineIdx] || '';
       
       let isLeftColumnAddition = false;
       let isRightColumnAddition = false;
       
-      const firstPipeInAdd = addText.indexOf('|');
-      if (firstPipeInAdd !== -1 && addText.substring(0, firstPipeInAdd).includes('-')) {
-        isLeftColumnAddition = true;
-      } else {
-        const lastPipeBefore = beforeText.lastIndexOf('|');
-        if (lastPipeBefore !== -1 && addText.length > beforeText.length) {
-          const trailingPart = addText.substring(lastPipeBefore + 1);
-          if (trailingPart.includes('-')) {
-            isRightColumnAddition = true;
+      const pipeCount = (addText.match(/\|/g) || []).length;
+      if (pipeCount >= 2) {
+        const firstPipeInAdd = addText.indexOf('|');
+        if (firstPipeInAdd !== -1 && /[-=_]/.test(addText.substring(0, firstPipeInAdd))) {
+          isLeftColumnAddition = true;
+        } else {
+          const lastPipeInAdd = addText.lastIndexOf('|');
+          if (lastPipeInAdd !== -1 && lastPipeInAdd < addText.length - 1) {
+            const trailingPart = addText.substring(lastPipeInAdd + 1);
+            if (/[-=_]/.test(trailingPart)) {
+              isRightColumnAddition = true;
+            }
           }
         }
       }
