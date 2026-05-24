@@ -1339,11 +1339,7 @@ export function activate(context: vscode.ExtensionContext) {
       return;
     }
 
-    // Ignore content deletion (backspace, delete, cut) to avoid modifying cell size in real-time
-    const isDeletion = event.contentChanges.every(change => change.text === '');
-    if (isDeletion) {
-      return;
-    }
+
 
     const hasTableChange = event.contentChanges.some(change => {
       const startLine = change.range.start.line;
@@ -1912,10 +1908,19 @@ export function activate(context: vscode.ExtensionContext) {
   let isConvertingSelection = false;
 
   const autoSelectionDisposable = vscode.window.onDidChangeTextEditorSelection(event => {
-    if (isConvertingSelection || isApplyingExtensionEdit || isFormatting) return;
-
     const editor = event.textEditor;
-    if (editor.document.languageId !== 'edumark' && !editor.document.fileName.endsWith('.did')) return;
+    const isEdumark = editor.document.languageId === 'edumark' || editor.document.fileName.endsWith('.did');
+    
+    if (isEdumark && event.selections.length === 1) {
+      const position = event.selections[0].active;
+      const info = getCellAtPosition(editor.document, position);
+      vscode.commands.executeCommand('setContext', 'edumark.isInTableCell', !!info);
+    } else {
+      vscode.commands.executeCommand('setContext', 'edumark.isInTableCell', false);
+    }
+
+    if (isConvertingSelection || isApplyingExtensionEdit || isFormatting) return;
+    if (!isEdumark) return;
 
     if (event.selections.length === 1) {
       const selection = event.selections[0];
@@ -1976,6 +1981,195 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
 
+  const registerNavCommand = (id: string, execute: (editor: vscode.TextEditor) => void) => {
+    context.subscriptions.push(vscode.commands.registerCommand(id, () => {
+      const editor = vscode.window.activeTextEditor;
+      if (editor) execute(editor);
+    }));
+  };
+
+  registerNavCommand('edumark.cursorRight', editor => {
+    const info = getCellAtPosition(editor.document, editor.selection.active);
+    if (!info) {
+      vscode.commands.executeCommand('cursorRight');
+      return;
+    }
+    const { cell, startLineIdx, hLines, vLines } = info;
+    const cellEndRow = startLineIdx + hLines[cell.row + cell.rowspan] - 1;
+    const pos = editor.selection.active;
+    const bounds = getCellLineContentBounds(editor.document, pos.line, cell, vLines);
+
+    if (pos.character < bounds.end) {
+      const newPos = new vscode.Position(pos.line, pos.character + 1);
+      editor.selection = new vscode.Selection(newPos, newPos);
+    } else if (pos.line < cellEndRow) {
+      const nextBounds = getCellLineContentBounds(editor.document, pos.line + 1, cell, vLines);
+      const newPos = new vscode.Position(pos.line + 1, nextBounds.start);
+      editor.selection = new vscode.Selection(newPos, newPos);
+    } else {
+      vscode.commands.executeCommand('cursorRight');
+    }
+  });
+
+  registerNavCommand('edumark.cursorLeft', editor => {
+    const info = getCellAtPosition(editor.document, editor.selection.active);
+    if (!info) {
+      vscode.commands.executeCommand('cursorLeft');
+      return;
+    }
+    const { cell, startLineIdx, hLines, vLines } = info;
+    const cellStartRow = startLineIdx + hLines[cell.row] + 1;
+    const pos = editor.selection.active;
+    const bounds = getCellLineContentBounds(editor.document, pos.line, cell, vLines);
+
+    if (pos.character > bounds.start) {
+      const newPos = new vscode.Position(pos.line, pos.character - 1);
+      editor.selection = new vscode.Selection(newPos, newPos);
+    } else if (pos.line > cellStartRow) {
+      const prevBounds = getCellLineContentBounds(editor.document, pos.line - 1, cell, vLines);
+      const newPos = new vscode.Position(pos.line - 1, prevBounds.end);
+      editor.selection = new vscode.Selection(newPos, newPos);
+    } else {
+      vscode.commands.executeCommand('cursorLeft');
+    }
+  });
+
+  registerNavCommand('edumark.cursorRightSelect', editor => {
+    const info = getCellAtPosition(editor.document, editor.selection.active);
+    if (!info) {
+      vscode.commands.executeCommand('cursorRightSelect');
+      return;
+    }
+    const { cell, startLineIdx, hLines, vLines } = info;
+    const cellEndRow = startLineIdx + hLines[cell.row + cell.rowspan] - 1;
+    const pos = editor.selection.active;
+    const bounds = getCellLineContentBounds(editor.document, pos.line, cell, vLines);
+
+    let newPos: vscode.Position;
+    if (pos.character < bounds.end) {
+      newPos = new vscode.Position(pos.line, pos.character + 1);
+    } else if (pos.line < cellEndRow) {
+      const nextBounds = getCellLineContentBounds(editor.document, pos.line + 1, cell, vLines);
+      newPos = new vscode.Position(pos.line + 1, nextBounds.start);
+    } else {
+      vscode.commands.executeCommand('cursorRightSelect');
+      return;
+    }
+    editor.selection = new vscode.Selection(editor.selection.anchor, newPos);
+  });
+
+  registerNavCommand('edumark.cursorLeftSelect', editor => {
+    const info = getCellAtPosition(editor.document, editor.selection.active);
+    if (!info) {
+      vscode.commands.executeCommand('cursorLeftSelect');
+      return;
+    }
+    const { cell, startLineIdx, hLines, vLines } = info;
+    const cellStartRow = startLineIdx + hLines[cell.row] + 1;
+    const pos = editor.selection.active;
+    const bounds = getCellLineContentBounds(editor.document, pos.line, cell, vLines);
+
+    let newPos: vscode.Position;
+    if (pos.character > bounds.start) {
+      newPos = new vscode.Position(pos.line, pos.character - 1);
+    } else if (pos.line > cellStartRow) {
+      const prevBounds = getCellLineContentBounds(editor.document, pos.line - 1, cell, vLines);
+      newPos = new vscode.Position(pos.line - 1, prevBounds.end);
+    } else {
+      vscode.commands.executeCommand('cursorLeftSelect');
+      return;
+    }
+    editor.selection = new vscode.Selection(editor.selection.anchor, newPos);
+  });
+
+  registerNavCommand('edumark.cursorDown', editor => {
+    const info = getCellAtPosition(editor.document, editor.selection.active);
+    if (!info) {
+      vscode.commands.executeCommand('cursorDown');
+      return;
+    }
+    const { cell, startLineIdx, hLines, vLines } = info;
+    const cellEndRow = startLineIdx + hLines[cell.row + cell.rowspan] - 1;
+    const pos = editor.selection.active;
+    const bounds = getCellLineContentBounds(editor.document, pos.line, cell, vLines);
+    const offset = pos.character - bounds.start;
+
+    if (pos.line < cellEndRow) {
+      const nextBounds = getCellLineContentBounds(editor.document, pos.line + 1, cell, vLines);
+      const newChar = Math.min(nextBounds.end, nextBounds.start + offset);
+      const newPos = new vscode.Position(pos.line + 1, newChar);
+      editor.selection = new vscode.Selection(newPos, newPos);
+    } else {
+      vscode.commands.executeCommand('cursorDown');
+    }
+  });
+
+  registerNavCommand('edumark.cursorUp', editor => {
+    const info = getCellAtPosition(editor.document, editor.selection.active);
+    if (!info) {
+      vscode.commands.executeCommand('cursorUp');
+      return;
+    }
+    const { cell, startLineIdx, hLines, vLines } = info;
+    const cellStartRow = startLineIdx + hLines[cell.row] + 1;
+    const pos = editor.selection.active;
+    const bounds = getCellLineContentBounds(editor.document, pos.line, cell, vLines);
+    const offset = pos.character - bounds.start;
+
+    if (pos.line > cellStartRow) {
+      const prevBounds = getCellLineContentBounds(editor.document, pos.line - 1, cell, vLines);
+      const newChar = Math.min(prevBounds.end, prevBounds.start + offset);
+      const newPos = new vscode.Position(pos.line - 1, newChar);
+      editor.selection = new vscode.Selection(newPos, newPos);
+    } else {
+      vscode.commands.executeCommand('cursorUp');
+    }
+  });
+
+  registerNavCommand('edumark.cursorDownSelect', editor => {
+    const info = getCellAtPosition(editor.document, editor.selection.active);
+    if (!info) {
+      vscode.commands.executeCommand('cursorDownSelect');
+      return;
+    }
+    const { cell, startLineIdx, hLines, vLines } = info;
+    const cellEndRow = startLineIdx + hLines[cell.row + cell.rowspan] - 1;
+    const pos = editor.selection.active;
+    const bounds = getCellLineContentBounds(editor.document, pos.line, cell, vLines);
+    const offset = pos.character - bounds.start;
+
+    if (pos.line < cellEndRow) {
+      const nextBounds = getCellLineContentBounds(editor.document, pos.line + 1, cell, vLines);
+      const newChar = Math.min(nextBounds.end, nextBounds.start + offset);
+      const newPos = new vscode.Position(pos.line + 1, newChar);
+      editor.selection = new vscode.Selection(editor.selection.anchor, newPos);
+    } else {
+      vscode.commands.executeCommand('cursorDownSelect');
+    }
+  });
+
+  registerNavCommand('edumark.cursorUpSelect', editor => {
+    const info = getCellAtPosition(editor.document, editor.selection.active);
+    if (!info) {
+      vscode.commands.executeCommand('cursorUpSelect');
+      return;
+    }
+    const { cell, startLineIdx, hLines, vLines } = info;
+    const cellStartRow = startLineIdx + hLines[cell.row] + 1;
+    const pos = editor.selection.active;
+    const bounds = getCellLineContentBounds(editor.document, pos.line, cell, vLines);
+    const offset = pos.character - bounds.start;
+
+    if (pos.line > cellStartRow) {
+      const prevBounds = getCellLineContentBounds(editor.document, pos.line - 1, cell, vLines);
+      const newChar = Math.min(prevBounds.end, prevBounds.start + offset);
+      const newPos = new vscode.Position(pos.line - 1, newChar);
+      editor.selection = new vscode.Selection(editor.selection.anchor, newPos);
+    } else {
+      vscode.commands.executeCommand('cursorUpSelect');
+    }
+  });
+
   context.subscriptions.push(formattingProvider);
   context.subscriptions.push(tableEnterCommand);
   context.subscriptions.push(tableTabCommand);
@@ -1986,7 +2180,6 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {}
 
-function getLineBoundaryPos(lineText: string, vLines: number[]): number[] {
   const lineVLines: number[] = [];
   for (let colIdx = 0; colIdx < lineText.length; colIdx++) {
     if (lineText[colIdx] === '|') {
@@ -2168,5 +2361,30 @@ function getCellAtPosition(document: vscode.TextDocument, position: vscode.Posit
     j,
     i
   };
+}
+
+function getCellLineContentBounds(document: vscode.TextDocument, rIdx: number, cell: any, vLines: number[]): { start: number; end: number } {
+  const lText = document.lineAt(rIdx).text;
+  const bPos = getLineBoundaryPos(lText, vLines);
+  const lSep = bPos[cell.column] !== -1 ? bPos[cell.column] : vLines[cell.column];
+  const rSep = bPos[cell.column + cell.colspan] !== -1 ? bPos[cell.column + cell.colspan] : vLines[cell.column + cell.colspan];
+
+  if (lSep !== -1 && rSep !== -1) {
+    const raw = lText.substring(lSep + 1, rSep);
+    const mStart = raw.match(/^\s*/);
+    const startSpaces = mStart ? mStart[0].length : 0;
+    const mEnd = raw.match(/\s*$/);
+    const endSpaces = mEnd ? mEnd[0].length : 0;
+
+    const contentStart = lSep + 1 + startSpaces;
+    const contentEnd = rSep - endSpaces;
+
+    if (contentStart < contentEnd) {
+      return { start: contentStart, end: contentEnd };
+    } else {
+      return { start: lSep + 2, end: lSep + 2 };
+    }
+  }
+  return { start: vLines[cell.column] + 2, end: vLines[cell.column] + 2 };
 }
 

@@ -1235,11 +1235,6 @@ function activate(context) {
             }
             return;
         }
-        // Ignore content deletion (backspace, delete, cut) to avoid modifying cell size in real-time
-        const isDeletion = event.contentChanges.every(change => change.text === '');
-        if (isDeletion) {
-            return;
-        }
         const hasTableChange = event.contentChanges.some(change => {
             const startLine = change.range.start.line;
             const endLine = Math.min(event.document.lineCount - 1, change.range.end.line + (change.text.split('\n').length - 1));

@@ -150,12 +150,12 @@ CONTENT
 * list item
 * another list item
     - subitem
-    - anorhter subitem
+    - another subitem
 
 AFTER
-|----------------------|
-| * list item          |
-| * another list item  |
-|   - subitem          |
-|   - anorhter subitem |
-|----------------------|
+|---------------------|
+| * list item         |
+| * another list item |
+|   - subitem         |
+|   - another subitem |
+|---------------------|

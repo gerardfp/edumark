@@ -70,6 +70,46 @@
         "command": "edumark.tableTab",
         "key": "oem_5",
         "when": "editorTextFocus && editorLangId == edumark"
+      },
+      {
+        "command": "edumark.cursorRight",
+        "key": "right",
+        "when": "editorTextFocus && edumark.isInTableCell"
+      },
+      {
+        "command": "edumark.cursorLeft",
+        "key": "left",
+        "when": "editorTextFocus && edumark.isInTableCell"
+      },
+      {
+        "command": "edumark.cursorRightSelect",
+        "key": "shift+right",
+        "when": "editorTextFocus && edumark.isInTableCell"
+      },
+      {
+        "command": "edumark.cursorLeftSelect",
+        "key": "shift+left",
+        "when": "editorTextFocus && edumark.isInTableCell"
+      },
+      {
+        "command": "edumark.cursorDown",
+        "key": "down",
+        "when": "editorTextFocus && edumark.isInTableCell"
+      },
+      {
+        "command": "edumark.cursorUp",
+        "key": "up",
+        "when": "editorTextFocus && edumark.isInTableCell"
+      },
+      {
+        "command": "edumark.cursorDownSelect",
+        "key": "shift+down",
+        "when": "editorTextFocus && edumark.isInTableCell"
+      },
+      {
+        "command": "edumark.cursorUpSelect",
+        "key": "shift+up",
+        "when": "editorTextFocus && edumark.isInTableCell"
       }
     ],
     "menus": {
