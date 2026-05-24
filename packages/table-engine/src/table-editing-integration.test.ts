@@ -97,6 +97,32 @@ function loadTestCases(): TestCase[] {
 }
 
 function findEditedLine(tableLines: string[]): number {
+  const isBorderRow = (rowStr: string): boolean => {
+    const trimmed = rowStr.trim();
+    return /^[|+\-\s=_]+$/.test(trimmed) && (/[-=_]/.test(trimmed) || trimmed.includes('+'));
+  };
+
+  const borderRowIndices: number[] = [];
+  for (let i = 0; i < tableLines.length; i++) {
+    if (isBorderRow(tableLines[i])) {
+      borderRowIndices.push(i);
+    }
+  }
+
+  if (borderRowIndices.length >= 2) {
+    const pipeCounts = borderRowIndices.map(idx => {
+      return (tableLines[idx].match(/\|/g) || []).length;
+    });
+    const maxCount = Math.max(...pipeCounts);
+    const minCount = Math.min(...pipeCounts);
+    if (maxCount > minCount) {
+      const maxIndices = borderRowIndices.filter((_, i) => pipeCounts[i] === maxCount);
+      if (maxIndices.length === 1) {
+        return maxIndices[0];
+      }
+    }
+  }
+
   for (let i = 0; i < tableLines.length; i++) {
     const line = tableLines[i].trim();
     const firstPipe = line.indexOf('|');
@@ -132,6 +158,35 @@ function findEditedLine(tableLines: string[]): number {
   }
 
   return 0;
+}
+
+function getLineBoundaryPos(lineText: string, vLines: number[]): number[] {
+  const lineVLines: number[] = [];
+  for (let colIdx = 0; colIdx < lineText.length; colIdx++) {
+    if (lineText[colIdx] === '|') {
+      lineVLines.push(colIdx);
+    }
+  }
+
+  const boundaryPos = Array(vLines.length).fill(-1);
+  if (lineVLines.length >= 2 && vLines.length >= 2) {
+    boundaryPos[0] = lineVLines[0];
+    boundaryPos[vLines.length - 1] = lineVLines[lineVLines.length - 1];
+    for (let k = 1; k < lineVLines.length - 1; k++) {
+      const s = lineVLines[k];
+      let closestIdx = 1;
+      let minDiff = Math.abs(s - vLines[1]);
+      for (let idx = 2; idx < vLines.length - 1; idx++) {
+        const diff = Math.abs(s - vLines[idx]);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestIdx = idx;
+        }
+      }
+      boundaryPos[closestIdx] = s;
+    }
+  }
+  return boundaryPos;
 }
 
 function projectNewColumns(tableLines: string[], currentLineIdx: number): string[] {
@@ -189,8 +244,7 @@ function projectNewColumns(tableLines: string[], currentLineIdx: number): string
     mapping.set(i, closestIdx);
   }
 
-  // 5. For each stable column interval [i, i + 1], identify if there are any new pipes in editPipes
-  // between mapping.get(i) and mapping.get(i + 1).
+  // 5. Identify new pipes in editPipes
   const insertions: { colIdx: number; relPos: number }[] = [];
   for (let i = 0; i < stableVLines.length - 1; i++) {
     const startEditIdx = mapping.get(i)!;
@@ -214,27 +268,50 @@ function projectNewColumns(tableLines: string[], currentLineIdx: number): string
     return b.relPos - a.relPos;
   });
 
+  const borderChar = currentLineText.includes('=') ? '=' : (currentLineText.includes('_') ? '_' : '-');
+
   // 6. Apply insertions to all other rows
   const newTableLines = [...tableLines];
   for (let l = 0; l < tableLines.length; l++) {
     if (l === currentLineIdx) continue;
     let lineText = tableLines[l];
     
-    const rowPipes: number[] = [];
-    for (let c = 0; c < lineText.length; c++) {
-      if (lineText[c] === '|') {
-        rowPipes.push(c);
-      }
-    }
-
-    if (rowPipes.length < stableVLines.length) {
-      continue;
-    }
+    const boundaryPos = getLineBoundaryPos(lineText, stableVLines);
+    const trimmed = lineText.trim();
+    const isBorder = /^[|+\-\s=_]+$/.test(trimmed) &&
+      (/[-=_]/.test(trimmed) || trimmed.includes('+'));
 
     for (const inst of insertions) {
-      const leftPipeIdx = rowPipes[inst.colIdx];
-      const insertIdx = leftPipeIdx + 1 + inst.relPos;
-      lineText = lineText.substring(0, insertIdx) + '|' + lineText.substring(insertIdx);
+      const leftBoundaryPos = boundaryPos[inst.colIdx];
+      const rightBoundaryPos = boundaryPos[inst.colIdx + 1];
+
+      let insertIdx = -1;
+      let insertChar = isBorder ? borderChar : ' ';
+
+      if (leftBoundaryPos !== -1) {
+        insertIdx = leftBoundaryPos + 1 + inst.relPos;
+        if (rightBoundaryPos !== -1) {
+          insertChar = isBorder ? borderChar : '|';
+        }
+      } else {
+        let p = inst.colIdx - 1;
+        while (p >= 0 && boundaryPos[p] === -1) {
+          p--;
+        }
+        if (p >= 0) {
+          const offset = stableVLines[inst.colIdx] - stableVLines[p];
+          insertIdx = boundaryPos[p] + 1 + offset + inst.relPos;
+        }
+      }
+
+      if (insertIdx !== -1 && insertIdx <= lineText.length) {
+        lineText = lineText.substring(0, insertIdx) + insertChar + lineText.substring(insertIdx);
+        for (let idx = 0; idx < boundaryPos.length; idx++) {
+          if (boundaryPos[idx] !== -1 && boundaryPos[idx] >= insertIdx) {
+            boundaryPos[idx]++;
+          }
+        }
+      }
     }
     newTableLines[l] = lineText;
   }
@@ -250,6 +327,135 @@ describe('Table Layout Editing Integration Tests', () => {
     it(`should format Case ${idx + 1} correctly`, () => {
       const addLines = tc.before;
       const currentLineIdx = findEditedLine(addLines);
+
+      // Check for middle column addition intent
+      const isBorderRow = (rowStr: string): boolean => {
+        const trimmed = rowStr.trim();
+        return /^[|+\-\s=_]+$/.test(trimmed) && (/[-=_]/.test(trimmed) || trimmed.includes('+'));
+      };
+
+      let isMiddleColumnAddition = false;
+      let newColIdx = -1;
+      let originalTableLines: string[] = [];
+
+      if (isBorderRow(addLines[currentLineIdx])) {
+        // Find other border rows to compare
+        const otherBorderIdxs = addLines
+          .map((_, i) => i)
+          .filter(i => i !== currentLineIdx && isBorderRow(addLines[i]));
+
+        if (otherBorderIdxs.length > 0) {
+          const stableBorderRowIdx = otherBorderIdxs[0];
+          const stableLine = addLines[stableBorderRowIdx];
+          const editedLine = addLines[currentLineIdx];
+
+          const stablePipes: number[] = [];
+          for (let c = 0; c < stableLine.length; c++) {
+            if (stableLine[c] === '|') stablePipes.push(c);
+          }
+
+          const editedPipes: number[] = [];
+          for (let c = 0; c < editedLine.length; c++) {
+            if (editedLine[c] === '|' || editedLine[c] === '+') editedPipes.push(c);
+          }
+
+          if (editedPipes.length > stablePipes.length) {
+            // Find the extra pipe
+            let bestExtraIdx = -1;
+            let minAlignError = Infinity;
+            for (let e = 1; e < editedPipes.length - 1; e++) {
+              let error = 0;
+              for (let idx = 0; idx < e; idx++) {
+                error += Math.abs(editedPipes[idx] - stablePipes[idx]);
+              }
+              for (let idx = e; idx < stablePipes.length; idx++) {
+                error += Math.abs(editedPipes[idx + 1] - stablePipes[idx]);
+              }
+              if (error < minAlignError) {
+                minAlignError = error;
+                bestExtraIdx = e;
+              }
+            }
+
+            if (bestExtraIdx !== -1) {
+              const extraPipePos = editedPipes[bestExtraIdx];
+              let stableColIdx = -1;
+              let relPipePos = -1;
+              let cellTextLen = -1;
+
+              for (let c = 0; c < stablePipes.length - 1; c++) {
+                if (stablePipes[c] < extraPipePos && extraPipePos < stablePipes[c + 1]) {
+                  stableColIdx = c;
+                  const leftEditPipe = editedPipes[bestExtraIdx - 1];
+                  const rightEditPipe = editedPipes[bestExtraIdx + 1];
+                  const cellText = editedLine.substring(leftEditPipe + 1, rightEditPipe);
+                  cellTextLen = cellText.length;
+                  relPipePos = extraPipePos - leftEditPipe - 1;
+                  break;
+                }
+              }
+
+              if (stableColIdx !== -1) {
+                isMiddleColumnAddition = true;
+                const isLeftHalf = relPipePos < (cellTextLen / 2);
+                if (isLeftHalf) {
+                  newColIdx = stableColIdx;
+                } else {
+                  newColIdx = stableColIdx + 1;
+                }
+
+                // Reconstruct original stable lines
+                originalTableLines = [...addLines];
+                originalTableLines[currentLineIdx] = stableLine;
+              }
+            }
+          }
+        }
+      }
+
+      if (isMiddleColumnAddition) {
+        const tableStr = originalTableLines.join('\n');
+        let tableNode = parseGeometricTable(tableStr);
+
+        // 1. Shift or expand existing cells
+        const newCells = tableNode.cells.map(cell => ({ ...cell }));
+        for (const cell of newCells) {
+          if (cell.column >= newColIdx) {
+            cell.column += 1;
+          } else if (cell.column + cell.colspan > newColIdx) {
+            cell.colspan += 1;
+          }
+        }
+
+        // 2. Identify gaps in each row and insert empty cells
+        for (let r = 0; r < tableNode.rowsCount; r++) {
+          const isCovered = newCells.some(
+            cell => cell.row <= r && r < cell.row + cell.rowspan &&
+                    cell.column <= newColIdx && newColIdx < cell.column + cell.colspan
+          );
+          if (!isCovered) {
+            newCells.push({
+              id: `cell_${r}_${newColIdx}`,
+              row: r,
+              column: newColIdx,
+              rowspan: 1,
+              colspan: 1,
+              content: [],
+              classes: [],
+              styles: {}
+            });
+          }
+        }
+
+        tableNode.colsCount += 1;
+        tableNode.cells = newCells;
+
+        tableNode = simplifyTable(tableNode);
+        const formatted = formatGeometricTable(tableNode);
+        const expected = tc.after.join('\n');
+        expect(formatted).toBe(expected);
+        return;
+      }
 
       const addText = addLines[currentLineIdx] || '';
       

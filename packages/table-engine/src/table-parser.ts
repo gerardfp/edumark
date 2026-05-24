@@ -87,8 +87,64 @@ export function parseGeometricTable(tableStr: string, isRubric = false, preserve
 
     const activeBoundaries = new Set<number>();
     if (rStart > rEnd) {
-      for (const v of vLines) {
-        activeBoundaries.add(v);
+      // Empty row interval (e.g. newly added row). Inherit boundaries from adjacent row interval.
+      let targetJ = -1;
+      if (j > 0) {
+        targetJ = j - 1;
+      } else if (rowIntervalsCount > 1) {
+        targetJ = j + 1;
+      }
+
+      if (targetJ !== -1) {
+        const adjStart = hLines[targetJ] + 1;
+        const adjEnd = hLines[targetJ + 1] - 1;
+        for (let r = adjStart; r <= adjEnd; r++) {
+          const lineText = grid[r];
+          const lineVLines: number[] = [];
+          for (let c = 0; c < lineText.length; c++) {
+            if (lineText[c] === '|') {
+              lineVLines.push(c);
+            }
+          }
+          if (lineVLines.length >= 2) {
+            if (lineVLines.length >= vLines.length) {
+              for (let idx = 1; idx < lineVLines.length - 1; idx++) {
+                const s = lineVLines[idx];
+                if (vLines.length > 2) {
+                  let closestVal = vLines[1];
+                  let minDiff = Math.abs(s - vLines[1]);
+                  for (let vIdx = 2; vIdx < vLines.length - 1; vIdx++) {
+                    const diff = Math.abs(s - vLines[vIdx]);
+                    if (diff < minDiff) {
+                      minDiff = diff;
+                      closestVal = vLines[vIdx];
+                    }
+                  }
+                  activeBoundaries.add(closestVal);
+                }
+              }
+            } else {
+              for (const s of lineVLines) {
+                let closestVal = vLines[0];
+                let minDiff = Math.abs(s - vLines[0]);
+                for (let vIdx = 1; vIdx < vLines.length; vIdx++) {
+                  const diff = Math.abs(s - vLines[vIdx]);
+                  if (diff < minDiff) {
+                    minDiff = diff;
+                    closestVal = vLines[vIdx];
+                  }
+                }
+                if (closestVal !== vLines[0] && closestVal !== vLines[vLines.length - 1]) {
+                  activeBoundaries.add(closestVal);
+                }
+              }
+            }
+          }
+        }
+      } else {
+        for (const v of vLines) {
+          activeBoundaries.add(v);
+        }
       }
     } else {
       for (let r = rStart; r <= rEnd; r++) {

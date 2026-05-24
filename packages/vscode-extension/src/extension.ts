@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { parse } from '@edumark/parser';
 import { renderToHTML } from '@edumark/renderer-html';
-import { parseGeometricTable, formatGeometricTable } from '@edumark/table-engine';
+import { parseGeometricTable, formatGeometricTable, simplifyTable } from '@edumark/table-engine';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -257,6 +257,14 @@ export function activate(context: vscode.ExtensionContext) {
     const vLines = Array.from(vLinesSet).sort((a, b) => a - b);
 
     if (hLines.length < 2 || vLines.length < 2) return;
+
+    const expectedColsCount = vLines.length - 1;
+    const expectedRowsCount = hLines.length - 1;
+
+    if (tableNode.colsCount !== expectedColsCount || tableNode.rowsCount !== expectedRowsCount) {
+      logToFile(`runLiveFormatting: structural change detected (expected cols ${expectedColsCount}, got ${tableNode.colsCount}). Aborting live formatting.`);
+      return;
+    }
 
     let j = -1;
     for (let idx = 0; idx < hLines.length - 1; idx++) {
@@ -544,13 +552,205 @@ export function activate(context: vscode.ExtensionContext) {
       endLineIdx++;
     }
 
+    // Check for middle column addition intent
+    const isBorderRow = (rowStr: string): boolean => {
+      const trimmed = rowStr.trim();
+      return /^[|+\-\s=_]+$/.test(trimmed) && (/[-=_]/.test(trimmed) || trimmed.includes('+'));
+    };
+
+    let isMiddleColumnAddition = false;
+    let newColIdx = -1;
+    let originalTableLines: string[] = [];
+
+    const tempTableLines: string[] = [];
+    for (let l = startLineIdx; l <= endLineIdx; l++) {
+      tempTableLines.push(document.lineAt(l).text);
+    }
+
+    const currentLineIdxInTemp = currentLineIdx - startLineIdx;
+
+    if (isBorderRow(currentLineText)) {
+      // Find other border rows to compare
+      const otherBorderIdxs = tempTableLines
+        .map((_, i) => i)
+        .filter(i => i !== currentLineIdxInTemp && isBorderRow(tempTableLines[i]));
+
+      if (otherBorderIdxs.length > 0) {
+        const stableBorderRowIdx = otherBorderIdxs[0];
+        const stableLine = tempTableLines[stableBorderRowIdx];
+        const editedLine = currentLineText;
+
+        const stablePipes: number[] = [];
+        for (let c = 0; c < stableLine.length; c++) {
+          if (stableLine[c] === '|') stablePipes.push(c);
+        }
+
+        const editedPipes: number[] = [];
+        for (let c = 0; c < editedLine.length; c++) {
+          if (editedLine[c] === '|' || editedLine[c] === '+') editedPipes.push(c);
+        }
+
+        if (editedPipes.length > stablePipes.length) {
+          // Find the extra pipe
+          let bestExtraIdx = -1;
+          let minAlignError = Infinity;
+          for (let e = 1; e < editedPipes.length - 1; e++) {
+            let error = 0;
+            for (let idx = 0; idx < e; idx++) {
+              error += Math.abs(editedPipes[idx] - stablePipes[idx]);
+            }
+            for (let idx = e; idx < stablePipes.length; idx++) {
+              error += Math.abs(editedPipes[idx + 1] - stablePipes[idx]);
+            }
+            if (error < minAlignError) {
+              minAlignError = error;
+              bestExtraIdx = e;
+            }
+          }
+
+          if (bestExtraIdx !== -1) {
+            const extraPipePos = editedPipes[bestExtraIdx];
+            let stableColIdx = -1;
+            let relPipePos = -1;
+            let cellTextLen = -1;
+
+            for (let c = 0; c < stablePipes.length - 1; c++) {
+              if (stablePipes[c] < extraPipePos && extraPipePos < stablePipes[c + 1]) {
+                stableColIdx = c;
+                const leftEditPipe = editedPipes[bestExtraIdx - 1];
+                const rightEditPipe = editedPipes[bestExtraIdx + 1];
+                const cellText = editedLine.substring(leftEditPipe + 1, rightEditPipe);
+                cellTextLen = cellText.length;
+                relPipePos = extraPipePos - leftEditPipe - 1;
+                break;
+              }
+            }
+
+            if (stableColIdx !== -1) {
+              isMiddleColumnAddition = true;
+              const isLeftHalf = relPipePos < (cellTextLen / 2);
+              if (isLeftHalf) {
+                newColIdx = stableColIdx;
+              } else {
+                newColIdx = stableColIdx + 1;
+              }
+
+              // Reconstruct original stable lines
+              originalTableLines = [...tempTableLines];
+              originalTableLines[currentLineIdxInTemp] = stableLine;
+            }
+          }
+        }
+      }
+    }
+
+    if (isMiddleColumnAddition) {
+      const tableStr = originalTableLines.join('\n');
+      let tableNode;
+      try {
+        tableNode = parseGeometricTable(tableStr, false, false);
+      } catch (e) {
+        return;
+      }
+
+      if (!tableNode || tableNode.cells.length === 0) return;
+
+      // 1. Shift or expand existing cells
+      const newCells = tableNode.cells.map(cell => ({ ...cell }));
+      for (const cell of newCells) {
+        if (cell.column >= newColIdx) {
+          cell.column += 1;
+        } else if (cell.column + cell.colspan > newColIdx) {
+          cell.colspan += 1;
+        }
+      }
+
+      // 2. Identify gaps in each row and insert empty cells
+      for (let r = 0; r < tableNode.rowsCount; r++) {
+        const isCovered = newCells.some(
+          cell => cell.row <= r && r < cell.row + cell.rowspan &&
+                  cell.column <= newColIdx && newColIdx < cell.column + cell.colspan
+        );
+        if (!isCovered) {
+          newCells.push({
+            id: `cell_${r}_${newColIdx}`,
+            row: r,
+            column: newColIdx,
+            rowspan: 1,
+            colspan: 1,
+            content: [],
+            classes: [],
+            styles: {}
+          });
+        }
+      }
+
+      tableNode.colsCount += 1;
+      tableNode.cells = newCells;
+
+      let formattedTable;
+      try {
+        tableNode = simplifyTable(tableNode);
+        formattedTable = formatGeometricTable(tableNode);
+      } catch (e: any) {
+        logToFile(`Error formatting table in runLayoutFormatting: ${e.message}`);
+        return;
+      }
+
+      let success = false;
+      try {
+        isFormatting = true;
+        isApplyingExtensionEdit = true;
+        const range = new vscode.Range(
+          new vscode.Position(startLineIdx, 0),
+          new vscode.Position(endLineIdx, document.lineAt(endLineIdx).text.length)
+        );
+
+        const workspaceEdit = new vscode.WorkspaceEdit();
+        workspaceEdit.replace(document.uri, range, formattedTable);
+        success = await applyWorkspaceEdit(workspaceEdit);
+      } catch (err: any) {
+        logToFile(`Error applying live format edit (layout Tab): ${err.message}`);
+      } finally {
+        isApplyingExtensionEdit = false;
+        isFormatting = false;
+      }
+
+      if (success) {
+        // Adjust cursor position: We place it inside the newly inserted column in the edited row!
+        const newLines = formattedTable.split('\n');
+        
+        // Let's find the new column pipe position in the formatted table.
+        const targetLineIdx = currentLineIdx;
+        const targetLineText = newLines[targetLineIdx - startLineIdx] || '';
+        
+        let targetPipeIdx = -1;
+        let pipeCount = 0;
+        for (let k = 0; k < targetLineText.length; k++) {
+          if (targetLineText[k] === '|') {
+            if (pipeCount === newColIdx) {
+              targetPipeIdx = k;
+              break;
+            }
+            pipeCount++;
+          }
+        }
+        
+        const targetCharIdx = targetPipeIdx !== -1 ? targetPipeIdx + 2 : 2;
+        const newPosition = new vscode.Position(targetLineIdx, targetCharIdx);
+        currentEditor.selection = new vscode.Selection(newPosition, newPosition);
+      }
+      return;
+    }
+
     const firstPipeCurrentLine = currentLineText.indexOf('|');
     const lastPipeCurrentLine = currentLineText.lastIndexOf('|');
 
     let isLeftColumnAddition = false;
     let isRightColumnAddition = false;
 
-    if (firstPipeCurrentLine !== -1 && startLineIdx !== endLineIdx) {
+    const pipeCount = (currentLineText.match(/\|/g) || []).length;
+    if (pipeCount >= 2 && firstPipeCurrentLine !== -1 && startLineIdx !== endLineIdx) {
       const beforeFirstPipe = currentLineText.substring(0, firstPipeCurrentLine);
       const afterLastPipe = currentLineText.substring(lastPipeCurrentLine + 1);
       if (/[-=_]/.test(beforeFirstPipe)) {
@@ -734,6 +934,7 @@ export function activate(context: vscode.ExtensionContext) {
     let tableNode;
     try {
       tableNode = parseGeometricTable(tableStr, false, false);
+      tableNode = simplifyTable(tableNode);
     } catch (e) {
       return;
     }
@@ -893,6 +1094,12 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     if (event.contentChanges.length === 0) {
+      return;
+    }
+
+    // Ignore content deletion (backspace, delete, cut) to avoid modifying cell size in real-time
+    const isDeletion = event.contentChanges.every(change => change.text === '');
+    if (isDeletion) {
       return;
     }
 
