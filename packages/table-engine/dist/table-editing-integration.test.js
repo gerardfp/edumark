@@ -651,4 +651,208 @@ function projectNewColumns(tableLines, currentLineIdx) {
         });
     });
 });
+function loadCellEditingTestCases() {
+    const filePath = path.join(__dirname, '../../../test_cell_contents_editing');
+    const fileContent = fs.readFileSync(filePath, 'utf-8');
+    const lines = fileContent.split(/\r?\n/);
+    const cases = [];
+    let currentCase = {};
+    let currentSection = null;
+    let currentLines = [];
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.startsWith('BEFORE')) {
+            if (currentCase.after) {
+                cases.push(currentCase);
+                currentCase = {};
+            }
+            currentSection = 'before';
+            currentLines = [];
+        }
+        else if (line.startsWith('CONTENT')) {
+            if (currentSection && currentLines.length > 0) {
+                currentCase[currentSection] = currentLines;
+            }
+            currentSection = 'content';
+            currentLines = [];
+        }
+        else if (line.startsWith('AFTER')) {
+            if (currentSection && currentLines.length > 0) {
+                currentCase[currentSection] = currentLines;
+            }
+            currentSection = 'after';
+            currentLines = [];
+        }
+        else if (line.trim() === '') {
+            if (currentSection && currentLines.length > 0) {
+                currentCase[currentSection] = currentLines;
+                currentSection = null;
+                currentLines = [];
+            }
+        }
+        else {
+            currentLines.push(line);
+        }
+    }
+    if (currentSection && currentLines.length > 0) {
+        currentCase[currentSection] = currentLines;
+    }
+    if (currentCase.after) {
+        cases.push(currentCase);
+    }
+    return cases;
+}
+(0, vitest_1.describe)('Table Cell Content Editing Integration Tests', () => {
+    const testCases = loadCellEditingTestCases();
+    testCases.forEach((tc, idx) => {
+        (0, vitest_1.it)(`should simulate Content Editing Case ${idx + 1} correctly`, () => {
+            const beforeLines = tc.before;
+            let cursorRow = -1;
+            let cursorCol = -1;
+            const cleanBeforeLines = [];
+            for (let r = 0; r < beforeLines.length; r++) {
+                const line = beforeLines[r];
+                const atIdx = line.indexOf('@');
+                if (atIdx !== -1) {
+                    cursorRow = r;
+                    cursorCol = atIdx;
+                    cleanBeforeLines.push(line.substring(0, atIdx) + ' ' + line.substring(atIdx + 1));
+                }
+                else {
+                    cleanBeforeLines.push(line);
+                }
+            }
+            const tableStr = cleanBeforeLines.join('\n');
+            let tableNode = (0, table_parser_js_1.parseGeometricTable)(tableStr, false, true);
+            const maxLength = Math.max(...cleanBeforeLines.map(line => line.length));
+            const grid = cleanBeforeLines.map(line => line.padEnd(maxLength, ' '));
+            const hLines = [];
+            for (let row = 0; row < grid.length; row++) {
+                const rowStr = grid[row];
+                const isBorderRow = /^[|+\-\s=_]+$/.test(rowStr) && (/[-=_]/.test(rowStr) || rowStr.includes('+'));
+                if (isBorderRow)
+                    hLines.push(row);
+            }
+            const vLinesSet = new Set();
+            for (const borderRow of hLines) {
+                const rowStr = grid[borderRow];
+                for (let col = 0; col < rowStr.length; col++) {
+                    if (rowStr[col] === '|' || rowStr[col] === '+')
+                        vLinesSet.add(col);
+                }
+            }
+            const vLines = Array.from(vLinesSet).sort((a, b) => a - b);
+            let j = -1;
+            for (let idx = 0; idx < hLines.length - 1; idx++) {
+                if (cursorRow > hLines[idx] && cursorRow < hLines[idx + 1]) {
+                    j = idx;
+                    break;
+                }
+            }
+            const originalLineText = cleanBeforeLines[cursorRow];
+            const currentLineBoundaryPos = getLineBoundaryPos(originalLineText, vLines);
+            let i = -1;
+            for (let idx = 0; idx < vLines.length - 1; idx++) {
+                const left = currentLineBoundaryPos[idx] !== -1 ? currentLineBoundaryPos[idx] : vLines[idx];
+                const right = currentLineBoundaryPos[idx + 1] !== -1 ? currentLineBoundaryPos[idx + 1] : vLines[idx + 1];
+                if (cursorCol > left && cursorCol <= right) {
+                    i = idx;
+                    break;
+                }
+            }
+            const cell = tableNode.cells.find(cell => cell.row <= j && j < cell.row + cell.rowspan && cell.column <= i && i < cell.column + cell.colspan);
+            (0, vitest_1.expect)(cell).toBeDefined();
+            const contentText = tc.content.join('\n');
+            const cellStartRow = hLines[cell.row] + 1;
+            let linesBeforeCursor = 0;
+            for (let rowIdx = cellStartRow; rowIdx < cursorRow; rowIdx++) {
+                if (!hLines.includes(rowIdx)) {
+                    linesBeforeCursor++;
+                }
+            }
+            const lineIdx = linesBeforeCursor;
+            const boundaryPos = getLineBoundaryPos(originalLineText, vLines);
+            const leftSep = boundaryPos[cell.column] !== -1 ? boundaryPos[cell.column] : vLines[cell.column];
+            const rightSep = boundaryPos[cell.column + cell.colspan] !== -1 ? boundaryPos[cell.column + cell.colspan] : vLines[cell.column + cell.colspan];
+            const colStart = leftSep + 1;
+            const cellColEnd = rightSep - 1;
+            const cellLineSlice = originalLineText.substring(colStart, cellColEnd + 1);
+            const relCursor = cursorCol - colStart;
+            const sliceTrimmedLeading = cellLineSlice.startsWith(' ') ? cellLineSlice.substring(1) : cellLineSlice;
+            const actualRelCursor = cellLineSlice.startsWith(' ') ? relCursor - 1 : relCursor;
+            const part1 = sliceTrimmedLeading.substring(0, actualRelCursor).trimStart();
+            const part2 = sliceTrimmedLeading.substring(actualRelCursor).trimEnd();
+            if (contentText === '[INTRO]') {
+                const newContent = [...cell.content];
+                while (newContent.length <= lineIdx) {
+                    newContent.push('');
+                }
+                newContent[lineIdx] = part1;
+                newContent.splice(lineIdx + 1, 0, part2);
+                cell.content = newContent;
+                for (const otherCell of tableNode.cells) {
+                    if (otherCell.id !== cell.id) {
+                        if (otherCell.row <= j && j < otherCell.row + otherCell.rowspan) {
+                            otherCell.content.push('');
+                        }
+                    }
+                }
+            }
+            else {
+                const normalizeIndentation = (lines) => {
+                    return lines.map(line => {
+                        let processed = line.replace(/\t/g, '  ');
+                        const match = processed.match(/^( +)/);
+                        if (match) {
+                            const leadingSpaces = match[1].length;
+                            const newSpacesCount = Math.round(leadingSpaces / 2);
+                            processed = ' '.repeat(newSpacesCount) + processed.substring(leadingSpaces);
+                        }
+                        return processed;
+                    });
+                };
+                const pastedLines = normalizeIndentation(tc.content);
+                const N = pastedLines.length - 1;
+                const newContent = [...cell.content];
+                while (newContent.length <= lineIdx) {
+                    newContent.push('');
+                }
+                const pastedInsertion = [];
+                if (pastedLines.length === 1) {
+                    pastedInsertion.push(part1 + pastedLines[0] + part2);
+                }
+                else {
+                    pastedInsertion.push(part1 + pastedLines[0]);
+                    for (let k = 1; k < N; k++) {
+                        pastedInsertion.push(pastedLines[k]);
+                    }
+                    pastedInsertion.push(pastedLines[N] + part2);
+                }
+                newContent.splice(lineIdx, 1, ...pastedInsertion);
+                cell.content = newContent;
+                const extraLinesCount = pastedLines.length - 1;
+                for (const otherCell of tableNode.cells) {
+                    if (otherCell.id !== cell.id) {
+                        if (otherCell.row <= j && j < otherCell.row + otherCell.rowspan) {
+                            for (let k = 0; k < extraLinesCount; k++) {
+                                otherCell.content.push('');
+                            }
+                        }
+                    }
+                }
+            }
+            tableNode = (0, table_formatter_js_1.simplifyTable)(tableNode);
+            const formatted = (0, table_formatter_js_1.formatGeometricTable)(tableNode, true);
+            const expected = tc.after.join('\n');
+            let cleanExpected = expected;
+            const expectedAtIdx = expected.indexOf('@');
+            if (expectedAtIdx !== -1) {
+                cleanExpected = expected.substring(0, expectedAtIdx) + ' ' + expected.substring(expectedAtIdx + 1);
+            }
+            const expectedNode = (0, table_parser_js_1.parseGeometricTable)(cleanExpected, false, true);
+            const formattedExpected = (0, table_formatter_js_1.formatGeometricTable)(expectedNode, true);
+            (0, vitest_1.expect)(formatted).toBe(formattedExpected);
+        });
+    });
+});
 //# sourceMappingURL=table-editing-integration.test.js.map

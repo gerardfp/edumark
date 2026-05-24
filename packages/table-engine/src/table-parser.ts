@@ -356,8 +356,27 @@ export function parseGeometricTable(tableStr: string, isRubric = false, preserve
       }
     }
 
-    // Trim spaces from content lines
-    const finalContent = processedLines.map(line => line.trim());
+    // Preserve relative cell indentation
+    let minLeadingSpaces = Infinity;
+    for (const line of processedLines) {
+      if (line.trim() !== '') {
+        const match = line.match(/^( *)/);
+        const leading = match ? match[1].length : 0;
+        if (leading < minLeadingSpaces) {
+          minLeadingSpaces = leading;
+        }
+      }
+    }
+    if (minLeadingSpaces === Infinity) {
+      minLeadingSpaces = 0;
+    }
+
+    const finalContent = processedLines.map(line => {
+      if (line.trim() === '') return '';
+      const leftStripped = line.substring(minLeadingSpaces);
+      return leftStripped.trimEnd();
+    });
+
     if (!preserveEmptyLines) {
       while (finalContent.length > 0 && finalContent[finalContent.length - 1] === '') {
         finalContent.pop();

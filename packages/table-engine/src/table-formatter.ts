@@ -9,6 +9,9 @@ export function simplifyTable(table: TableNode): TableNode {
   // Clone cells to avoid modifying the original node
   let simplifiedCells = cells.map(cell => ({ ...cell }));
 
+  // Copy colWidths if available
+  let colWidths = table.colWidths ? [...table.colWidths] : undefined;
+
   // 1. Simplify redundant column boundaries
   // A column boundary k (1 <= k < colsCount) is redundant if no cell starts or ends at k.
   for (let k = colsCount - 1; k >= 1; k--) {
@@ -23,6 +26,10 @@ export function simplifyTable(table: TableNode): TableNode {
         } else if (cell.column + cell.colspan > k) {
           cell.colspan -= 1;
         }
+      }
+      if (colWidths && k < colWidths.length) {
+        colWidths[k - 1] += colWidths[k] + 1;
+        colWidths.splice(k, 1);
       }
       colsCount -= 1;
     }
@@ -51,19 +58,22 @@ export function simplifyTable(table: TableNode): TableNode {
     ...table,
     rowsCount,
     colsCount,
-    cells: simplifiedCells
+    cells: simplifiedCells,
+    colWidths
   };
 }
 
-export function formatGeometricTable(table: TableNode): string {
+export function formatGeometricTable(table: TableNode, preserveColWidths = false): string {
   if (table.rowsCount === 0 || table.colsCount === 0 || table.cells.length === 0) {
     return '';
   }
 
   const { rowsCount, colsCount, cells } = table;
 
-  // 1. Initialize Column Widths to a minimum width of 3
-  const colWidths = Array(colsCount).fill(3);
+  // 1. Initialize Column Widths to a minimum width of 3, preserving original widths if requested
+  const colWidths = preserveColWidths && table.colWidths && table.colWidths.length === colsCount
+    ? [...table.colWidths]
+    : Array(colsCount).fill(3);
 
   // 2. Compile cell lines (including properties if defined)
   const cellLinesMap = new Map<string, string[]>();
@@ -222,7 +232,7 @@ export function formatGeometricTable(table: TableNode): string {
           cellWidth += cell.colspan - 1; // include intermediate borders
 
           // Format line (left-aligned with padding)
-          const formatted = rawLine.trim().padEnd(cellWidth - 1, ' ');
+          const formatted = rawLine.trimEnd().padEnd(cellWidth - 1, ' ');
           contentLine += ' ' + formatted; // 1 space padding on left
         }
 

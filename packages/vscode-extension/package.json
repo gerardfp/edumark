@@ -53,6 +53,11 @@
         "command": "edumark.tableTab",
         "title": "Edumark: Autoformatear layout de tabla con la tecla º",
         "category": "Edumark"
+      },
+      {
+        "command": "edumark.selectCellContent",
+        "title": "Edumark: Seleccionar contenido completo de celda de tabla",
+        "category": "Edumark"
       }
     ],
     "keybindings": [

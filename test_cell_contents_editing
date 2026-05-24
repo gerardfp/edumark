@@ -140,3 +140,22 @@ AFTER
 |---|   |---|
 |   |   |   |
 |---|---|---|
+
+BEFORE
+|---|
+| @  |
+|---|
+
+CONTENT
+* list item
+* another list item
+    - subitem
+    - anorhter subitem
+
+AFTER
+|----------------------|
+| * list item          |
+| * another list item  |
+|   - subitem          |
+|   - anorhter subitem |
+|----------------------|
