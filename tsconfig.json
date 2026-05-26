@@ -3,7 +3,6 @@
     "baseUrl": ".",
     "paths": {
       "@edumark/shared": ["packages/shared/src/index.ts"],
-      "@edumark/table-engine": ["packages/table-engine/src/index.ts"],
       "@edumark/parser": ["packages/parser/src/index.ts"],
       "@edumark/renderer-html": ["packages/renderer-html/src/index.ts"]
     }
@@ -11,7 +10,6 @@
   "files": [],
   "references": [
     { "path": "packages/shared" },
-    { "path": "packages/table-engine" },
     { "path": "packages/parser" },
     { "path": "packages/renderer-html" },
     { "path": "packages/cli" },

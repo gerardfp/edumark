@@ -43,53 +43,6 @@
         "command": "edumark.showPreview",
         "title": "Edumark: Mostrar Vista Previa",
         "category": "Edumark"
-      },
-      {
-        "command": "edumark.tableEnter",
-        "title": "Edumark: Insertar nueva línea en celda de tabla",
-        "category": "Edumark"
-      },
-      {
-        "command": "edumark.tableTab",
-        "title": "Edumark: Autoformatear layout de tabla con la tecla º",
-        "category": "Edumark"
-      },
-      {
-        "command": "edumark.selectCellContent",
-        "title": "Edumark: Seleccionar contenido completo de celda de tabla",
-        "category": "Edumark"
-      }
-    ],
-    "keybindings": [
-      {
-        "command": "edumark.tableEnter",
-        "key": "enter",
-        "when": "editorTextFocus && editorLangId == edumark"
-      },
-      {
-        "command": "edumark.tableTab",
-        "key": "oem_5",
-        "when": "editorTextFocus && editorLangId == edumark"
-      },
-      {
-        "command": "edumark.cursorRightSelect",
-        "key": "shift+right",
-        "when": "editorTextFocus && edumark.isInTableCell"
-      },
-      {
-        "command": "edumark.cursorLeftSelect",
-        "key": "shift+left",
-        "when": "editorTextFocus && edumark.isInTableCell"
-      },
-      {
-        "command": "edumark.cursorDownSelect",
-        "key": "shift+down",
-        "when": "editorTextFocus && edumark.isInTableCell"
-      },
-      {
-        "command": "edumark.cursorUpSelect",
-        "key": "shift+up",
-        "when": "editorTextFocus && edumark.isInTableCell"
       }
     ],
     "menus": {
@@ -107,11 +60,13 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./"
   },
+  "extensionDependencies": [
+    "gerard.entaula"
+  ],
   "dependencies": {
     "@edumark/shared": "*",
     "@edumark/parser": "*",
-    "@edumark/renderer-html": "*",
-    "@edumark/table-engine": "*"
+    "@edumark/renderer-html": "*"
   },
   "devDependencies": {
     "@types/vscode": "^1.85.0"

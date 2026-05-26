@@ -148,53 +148,53 @@ export function parseGeometricTable(tableStr: string, isRubric = false, preserve
       }
     } else {
       for (let r = rStart; r <= rEnd; r++) {
-      const lineText = grid[r];
-      const lineVLines: number[] = [];
-      for (let c = 0; c < lineText.length; c++) {
-        if (lineText[c] === '|') {
-          lineVLines.push(c);
+        const lineText = grid[r];
+        const lineVLines: number[] = [];
+        for (let c = 0; c < lineText.length; c++) {
+          if (lineText[c] === '|') {
+            lineVLines.push(c);
+          }
         }
-      }
 
-      if (lineVLines.length >= 2) {
-        if (lineVLines.length >= vLines.length) {
-          // Map internal separators to internal vLines only
-          for (let idx = 1; idx < lineVLines.length - 1; idx++) {
-            const s = lineVLines[idx];
-            if (vLines.length > 2) {
-              let closestVal = vLines[1];
-              let minDiff = Math.abs(s - vLines[1]);
-              for (let vIdx = 2; vIdx < vLines.length - 1; vIdx++) {
+        if (lineVLines.length >= 2) {
+          if (lineVLines.length >= vLines.length) {
+            // Map internal separators to internal vLines only
+            for (let idx = 1; idx < lineVLines.length - 1; idx++) {
+              const s = lineVLines[idx];
+              if (vLines.length > 2) {
+                let closestVal = vLines[1];
+                let minDiff = Math.abs(s - vLines[1]);
+                for (let vIdx = 2; vIdx < vLines.length - 1; vIdx++) {
+                  const diff = Math.abs(s - vLines[vIdx]);
+                  if (diff < minDiff) {
+                    minDiff = diff;
+                    closestVal = vLines[vIdx];
+                  }
+                }
+                activeBoundaries.add(closestVal);
+              }
+            }
+          } else {
+            // Shorter row: map every separator to its closest vLines,
+            // but activeBoundaries only cares about internal vLines (exclude vLines[0] and vLines[vLines.length - 1])
+            for (const s of lineVLines) {
+              let closestVal = vLines[0];
+              let minDiff = Math.abs(s - vLines[0]);
+              for (let vIdx = 1; vIdx < vLines.length; vIdx++) {
                 const diff = Math.abs(s - vLines[vIdx]);
                 if (diff < minDiff) {
                   minDiff = diff;
                   closestVal = vLines[vIdx];
                 }
               }
-              activeBoundaries.add(closestVal);
-            }
-          }
-        } else {
-          // Shorter row: map every separator to its closest vLines,
-          // but activeBoundaries only cares about internal vLines (exclude vLines[0] and vLines[vLines.length - 1])
-          for (const s of lineVLines) {
-            let closestVal = vLines[0];
-            let minDiff = Math.abs(s - vLines[0]);
-            for (let vIdx = 1; vIdx < vLines.length; vIdx++) {
-              const diff = Math.abs(s - vLines[vIdx]);
-              if (diff < minDiff) {
-                minDiff = diff;
-                closestVal = vLines[vIdx];
+              if (closestVal !== vLines[0] && closestVal !== vLines[vLines.length - 1]) {
+                activeBoundaries.add(closestVal);
               }
-            }
-            if (closestVal !== vLines[0] && closestVal !== vLines[vLines.length - 1]) {
-              activeBoundaries.add(closestVal);
             }
           }
         }
       }
     }
-  }
 
     for (let i = 0; i < colIntervalsCount - 1; i++) {
       const boundaryColVal = vLines[i + 1];

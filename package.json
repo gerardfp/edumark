@@ -1,7 +1,7 @@
 {
   "name": "edumark-monorepo",
   "version": "1.0.0",
-  "description": "Edumark - Lenguaje declarativo para recursos educativos",
+  "description": "Edumark - Lenguaje de materiales didácticos",
   "private": true,
   "workspaces": [
     "packages/*"
@@ -10,7 +10,6 @@
     "build": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint \"packages/**/src/**/*.ts\"",
     "vscode:prepublish": "npm run compile --workspace=packages/vscode-extension"
   },
   "devDependencies": {

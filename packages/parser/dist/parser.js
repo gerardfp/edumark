@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.parse = parse;
 const lexer_js_1 = require("./lexer.js");
-const table_engine_1 = require("@edumark/table-engine");
+const table_parser_js_1 = require("./table-parser.js");
 function parseFrontmatter(lines) {
     const meta = {};
     for (const line of lines) {
@@ -113,7 +113,7 @@ function parseBlocks(tokens, errors, state = { idx: 0 }, parentDirectives = []) 
                 state.idx++;
             }
             try {
-                const tableNode = (0, table_engine_1.parseGeometricTable)(tableLines.join('\n'));
+                const tableNode = (0, table_parser_js_1.parseGeometricTable)(tableLines.join('\n'));
                 if (tableNode.cells.length > 0) {
                     nodes.push(tableNode);
                 }

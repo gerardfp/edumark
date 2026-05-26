@@ -13,7 +13,7 @@ import {
   QuestionType,
   ParagraphNode
 } from '@edumark/shared';
-import { parseGeometricTable } from '@edumark/table-engine';
+import { parseGeometricTable } from './table-parser.js';
 
 export interface ParseError {
   message: string;
