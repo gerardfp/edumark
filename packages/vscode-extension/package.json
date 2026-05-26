@@ -2,12 +2,13 @@
   "name": "edumark-vscode",
   "displayName": "Edumark",
   "description": "Herramienta de edición para Edumark (coloreado, autocompletado y vista previa)",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "publisher": "gerardfp",
   "repository": {
     "type": "git",
     "url": "https://github.com/gerardfp/edumark"
   },
+  "license": "GPL-3.0-or-later",
   "engines": {
     "vscode": "^1.85.0"
   },
