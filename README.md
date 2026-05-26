@@ -8,11 +8,8 @@ El propósito de Edumark es separar el contenido didáctico del diseño visual, 
 
 ## 🔌 Extensión para VS Code
 
-Existe una extensión para Visual Studio Code que facilita la creación de documentos Edumark.
+Descarga la extensión para Visual Studio Code para empezar a trabajar con Edumark.
 
-> [!IMPORTANT]
-> **Las siguientes características de edición y visualización son proporcionadas por la extensión de VS Code:**
->
 > - **Coloreado Sintáctico**: Resalta las directivas didácticas, metadatos, preguntas y bloques de código.
 > - **Soporte de Tablas**:
 >   - **Tablas estilo Ataula**: Soporta y resalta bordes con esquinas utilizando el carácter `+` (ej. `+---+---+`).
@@ -37,7 +34,7 @@ El lenguaje Edumark soporta:
 
 ## 🛠️ Guía de Sintaxis de Edumark (`.edu`)
 
-Los archivos de Edumark utilizan la extensión `.edu`. A continuación se detalla cómo escribir cada elemento.
+Los archivos de Edumark utilizan la extensión `.edu`.
 
 ### 1. Metadatos (Frontmatter)
 Todo documento puede comenzar con un bloque de metadatos encerrado entre `---` para definir las propiedades generales:
@@ -100,6 +97,9 @@ La primera línea de texto de una celda puede albergar un bloque de propiedades 
 
 **Ejemplo de uso:**
 ```markdown
+|fdsf|fsdf
+|fdsfsd|fdsdf
+
 +------------------------------------+------------------------------------+
 | { .header; text-align: center }                                         |
 | Tabla Comparativa de Rendimiento                                        |
