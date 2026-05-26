@@ -7,6 +7,10 @@ export function activate(context: vscode.ExtensionContext) {
 
   let previewPanel: vscode.WebviewPanel | undefined = undefined;
 
+  // Create decoration type for @end helper hints
+  const endDecorationType = vscode.window.createTextEditorDecorationType({});
+  context.subscriptions.push(endDecorationType);
+
   const showPreviewCommand = vscode.commands.registerCommand('edumark.showPreview', () => {
     const activeEditor = vscode.window.activeTextEditor;
     if (!activeEditor || activeEditor.document.languageId !== 'edumark') {
@@ -38,20 +42,82 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(showPreviewCommand);
 
-  // Update preview when active document changes
+  // Trigger decorations update
+  function triggerUpdateDecorations(editor: vscode.TextEditor | undefined) {
+    if (editor && (editor.document.languageId === 'edumark' || editor.document.fileName.endsWith('.edu'))) {
+      updateEndDecorations(editor, endDecorationType);
+    }
+  }
+
+  // Initial update
+  triggerUpdateDecorations(vscode.window.activeTextEditor);
+
+  // Update when active document changes
   vscode.workspace.onDidChangeTextDocument(event => {
+    const editor = vscode.window.activeTextEditor;
+    if (editor && event.document === editor.document) {
+      triggerUpdateDecorations(editor);
+    }
     if (previewPanel && event.document === vscode.window.activeTextEditor?.document) {
       updateWebview(event.document);
     }
   });
 
-  // Update preview when active editor changes
+  // Update when active editor changes
   vscode.window.onDidChangeActiveTextEditor(editor => {
+    triggerUpdateDecorations(editor);
     if (previewPanel && editor && (editor.document.languageId === 'edumark' || editor.document.fileName.endsWith('.edu'))) {
       previewPanel.title = `Vista Previa: ${vscode.workspace.asRelativePath(editor.document.uri)}`;
       updateWebview(editor.document);
     }
   });
+
+  function updateEndDecorations(editor: vscode.TextEditor, decorationType: vscode.TextEditorDecorationType) {
+    const document = editor.document;
+    const decorations: vscode.DecorationOptions[] = [];
+    const stack: { name: string; title: string }[] = [];
+
+    for (let lineIdx = 0; lineIdx < document.lineCount; lineIdx++) {
+      const lineText = document.lineAt(lineIdx).text;
+      const trimmed = lineText.trim();
+
+      // Check directive start
+      if (trimmed.startsWith('@') && !trimmed.startsWith('@end') && /^[a-zA-Z]/.test(trimmed.substring(1))) {
+        const match = trimmed.match(/^@([a-zA-Z0-9_\-]+)(.*)$/);
+        if (match) {
+          const name = match[1];
+          const title = match[2].trim();
+          stack.push({ name, title });
+        }
+      } 
+      // Check directive end
+      else if (trimmed.startsWith('@end')) {
+        if (stack.length > 0) {
+          const openDir = stack.pop()!;
+          const endIdx = lineText.indexOf(trimmed);
+          if (endIdx !== -1) {
+            const label = `[-${openDir.name}${openDir.title ? ' ' + openDir.title : ''}]`;
+            const startPos = new vscode.Position(lineIdx, endIdx);
+            const endPos = new vscode.Position(lineIdx, endIdx + trimmed.length);
+
+            decorations.push({
+              range: new vscode.Range(startPos, endPos),
+              renderOptions: {
+                after: {
+                  contentText: ` ${label}`,
+                  color: 'rgba(150, 150, 150, 0.65)',
+                  fontStyle: 'italic',
+                  margin: '0 0 0 10px'
+                }
+              }
+            });
+          }
+        }
+      }
+    }
+
+    editor.setDecorations(decorationType, decorations);
+  }
 
   function updateWebview(document: vscode.TextDocument) {
     if (!previewPanel) return;
