@@ -82,7 +82,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
 
-  function getDecorationTypeFor(name: string): vscode.TextEditorDecorationType {
+  function getDecorationTypeFor(name: string, bold = false): vscode.TextEditorDecorationType {
     const config = vscode.workspace.getConfiguration('edumark.colors');
     const standardKeys = [
       'page',
@@ -109,11 +109,11 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }
 
-    const cacheKey = `${key}-${color}`;
+    const cacheKey = `${key}-${color}-${bold ? 'bold' : 'normal'}`;
     if (!activeDecorations[cacheKey]) {
       activeDecorations[cacheKey] = vscode.window.createTextEditorDecorationType({
         color: color,
-        fontWeight: 'bold'
+        fontWeight: bold ? 'bold' : 'normal'
       });
       context.subscriptions.push(activeDecorations[cacheKey]);
     }
@@ -155,6 +155,7 @@ export function activate(context: vscode.ExtensionContext) {
 
           const cmdIdx = lineText.indexOf('@' + name);
           if (cmdIdx !== -1) {
+            // 1. Marker and type -> normal
             const startPos = new vscode.Position(lineIdx, cmdIdx);
             const endPos = new vscode.Position(lineIdx, cmdIdx + name.length + 1);
             const range = new vscode.Range(startPos, endPos);
@@ -169,15 +170,34 @@ export function activate(context: vscode.ExtensionContext) {
                 key = 'generic';
               }
             }
-            const cacheKey = `${key}-${color}`;
+            const cacheKeyNormal = `${key}-${color}-normal`;
             
-            const decType = getDecorationTypeFor(name);
-            decorationTypes.set(cacheKey, decType);
+            const decTypeNormal = getDecorationTypeFor(name, false);
+            decorationTypes.set(cacheKeyNormal, decTypeNormal);
             
-            if (!combinedDecorations.has(cacheKey)) {
-              combinedDecorations.set(cacheKey, []);
+            if (!combinedDecorations.has(cacheKeyNormal)) {
+              combinedDecorations.set(cacheKeyNormal, []);
             }
-            combinedDecorations.get(cacheKey)!.push({ range });
+            combinedDecorations.get(cacheKeyNormal)!.push({ range });
+
+            // 2. Title -> bold
+            if (title) {
+              const titleIdx = lineText.indexOf(title, cmdIdx + name.length + 1);
+              if (titleIdx !== -1) {
+                const titleStart = new vscode.Position(lineIdx, titleIdx);
+                const titleEnd = new vscode.Position(lineIdx, titleIdx + title.length);
+                const titleRange = new vscode.Range(titleStart, titleEnd);
+                
+                const cacheKeyBold = `${key}-${color}-bold`;
+                const decTypeBold = getDecorationTypeFor(name, true);
+                decorationTypes.set(cacheKeyBold, decTypeBold);
+                
+                if (!combinedDecorations.has(cacheKeyBold)) {
+                  combinedDecorations.set(cacheKeyBold, []);
+                }
+                combinedDecorations.get(cacheKeyBold)!.push({ range: titleRange });
+              }
+            }
           }
         }
       } 
@@ -208,6 +228,7 @@ export function activate(context: vscode.ExtensionContext) {
 
           const cmdIdx = lineText.indexOf(hashes + name);
           if (cmdIdx !== -1) {
+            // 1. Marker and type -> normal
             const startPos = new vscode.Position(lineIdx, cmdIdx);
             const endPos = new vscode.Position(lineIdx, cmdIdx + hashes.length + name.length);
             const range = new vscode.Range(startPos, endPos);
@@ -222,15 +243,34 @@ export function activate(context: vscode.ExtensionContext) {
                 key = 'generic';
               }
             }
-            const cacheKey = `${key}-${color}`;
+            const cacheKeyNormal = `${key}-${color}-normal`;
             
-            const decType = getDecorationTypeFor(name);
-            decorationTypes.set(cacheKey, decType);
+            const decTypeNormal = getDecorationTypeFor(name, false);
+            decorationTypes.set(cacheKeyNormal, decTypeNormal);
             
-            if (!combinedDecorations.has(cacheKey)) {
-              combinedDecorations.set(cacheKey, []);
+            if (!combinedDecorations.has(cacheKeyNormal)) {
+              combinedDecorations.set(cacheKeyNormal, []);
             }
-            combinedDecorations.get(cacheKey)!.push({ range });
+            combinedDecorations.get(cacheKeyNormal)!.push({ range });
+
+            // 2. Title -> bold
+            if (title) {
+              const titleIdx = lineText.indexOf(title, cmdIdx + hashes.length + name.length);
+              if (titleIdx !== -1) {
+                const titleStart = new vscode.Position(lineIdx, titleIdx);
+                const titleEnd = new vscode.Position(lineIdx, titleIdx + title.length);
+                const titleRange = new vscode.Range(titleStart, titleEnd);
+                
+                const cacheKeyBold = `${key}-${color}-bold`;
+                const decTypeBold = getDecorationTypeFor(name, true);
+                decorationTypes.set(cacheKeyBold, decTypeBold);
+                
+                if (!combinedDecorations.has(cacheKeyBold)) {
+                  combinedDecorations.set(cacheKeyBold, []);
+                }
+                combinedDecorations.get(cacheKeyBold)!.push({ range: titleRange });
+              }
+            }
           }
         }
       }
@@ -271,18 +311,18 @@ export function activate(context: vscode.ExtensionContext) {
                   key = 'generic';
                 }
               }
-              const cacheKey = `${key}-${color}`;
+              const cacheKeyNormal = `${key}-${color}-normal`;
               
-              const decType = getDecorationTypeFor(openDir.name);
-              decorationTypes.set(cacheKey, decType);
+              const decTypeNormal = getDecorationTypeFor(openDir.name, false);
+              decorationTypes.set(cacheKeyNormal, decTypeNormal);
               
-              if (!combinedDecorations.has(cacheKey)) {
-                combinedDecorations.set(cacheKey, []);
+              if (!combinedDecorations.has(cacheKeyNormal)) {
+                combinedDecorations.set(cacheKeyNormal, []);
               }
 
               const label = `[-${openDir.name}${openDir.title ? ' ' + openDir.title : ''}]`;
               
-              combinedDecorations.get(cacheKey)!.push({
+              combinedDecorations.get(cacheKeyNormal)!.push({
                 range: range,
                 renderOptions: {
                   after: {

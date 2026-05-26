@@ -101,7 +101,7 @@ function activate(context) {
             triggerUpdateDecorations(vscode.window.activeTextEditor);
         }
     });
-    function getDecorationTypeFor(name) {
+    function getDecorationTypeFor(name, bold = false) {
         const config = vscode.workspace.getConfiguration('edumark.colors');
         const standardKeys = [
             'page',
@@ -127,11 +127,11 @@ function activate(context) {
                 key = 'generic';
             }
         }
-        const cacheKey = `${key}-${color}`;
+        const cacheKey = `${key}-${color}-${bold ? 'bold' : 'normal'}`;
         if (!activeDecorations[cacheKey]) {
             activeDecorations[cacheKey] = vscode.window.createTextEditorDecorationType({
                 color: color,
-                fontWeight: 'bold'
+                fontWeight: bold ? 'bold' : 'normal'
             });
             context.subscriptions.push(activeDecorations[cacheKey]);
         }
@@ -168,6 +168,7 @@ function activate(context) {
                     stack.push({ name, title });
                     const cmdIdx = lineText.indexOf('@' + name);
                     if (cmdIdx !== -1) {
+                        // 1. Marker and type -> normal
                         const startPos = new vscode.Position(lineIdx, cmdIdx);
                         const endPos = new vscode.Position(lineIdx, cmdIdx + name.length + 1);
                         const range = new vscode.Range(startPos, endPos);
@@ -182,13 +183,29 @@ function activate(context) {
                                 key = 'generic';
                             }
                         }
-                        const cacheKey = `${key}-${color}`;
-                        const decType = getDecorationTypeFor(name);
-                        decorationTypes.set(cacheKey, decType);
-                        if (!combinedDecorations.has(cacheKey)) {
-                            combinedDecorations.set(cacheKey, []);
+                        const cacheKeyNormal = `${key}-${color}-normal`;
+                        const decTypeNormal = getDecorationTypeFor(name, false);
+                        decorationTypes.set(cacheKeyNormal, decTypeNormal);
+                        if (!combinedDecorations.has(cacheKeyNormal)) {
+                            combinedDecorations.set(cacheKeyNormal, []);
                         }
-                        combinedDecorations.get(cacheKey).push({ range });
+                        combinedDecorations.get(cacheKeyNormal).push({ range });
+                        // 2. Title -> bold
+                        if (title) {
+                            const titleIdx = lineText.indexOf(title, cmdIdx + name.length + 1);
+                            if (titleIdx !== -1) {
+                                const titleStart = new vscode.Position(lineIdx, titleIdx);
+                                const titleEnd = new vscode.Position(lineIdx, titleIdx + title.length);
+                                const titleRange = new vscode.Range(titleStart, titleEnd);
+                                const cacheKeyBold = `${key}-${color}-bold`;
+                                const decTypeBold = getDecorationTypeFor(name, true);
+                                decorationTypes.set(cacheKeyBold, decTypeBold);
+                                if (!combinedDecorations.has(cacheKeyBold)) {
+                                    combinedDecorations.set(cacheKeyBold, []);
+                                }
+                                combinedDecorations.get(cacheKeyBold).push({ range: titleRange });
+                            }
+                        }
                     }
                 }
             }
@@ -216,6 +233,7 @@ function activate(context) {
                     stack.push({ name, title, level });
                     const cmdIdx = lineText.indexOf(hashes + name);
                     if (cmdIdx !== -1) {
+                        // 1. Marker and type -> normal
                         const startPos = new vscode.Position(lineIdx, cmdIdx);
                         const endPos = new vscode.Position(lineIdx, cmdIdx + hashes.length + name.length);
                         const range = new vscode.Range(startPos, endPos);
@@ -230,13 +248,29 @@ function activate(context) {
                                 key = 'generic';
                             }
                         }
-                        const cacheKey = `${key}-${color}`;
-                        const decType = getDecorationTypeFor(name);
-                        decorationTypes.set(cacheKey, decType);
-                        if (!combinedDecorations.has(cacheKey)) {
-                            combinedDecorations.set(cacheKey, []);
+                        const cacheKeyNormal = `${key}-${color}-normal`;
+                        const decTypeNormal = getDecorationTypeFor(name, false);
+                        decorationTypes.set(cacheKeyNormal, decTypeNormal);
+                        if (!combinedDecorations.has(cacheKeyNormal)) {
+                            combinedDecorations.set(cacheKeyNormal, []);
                         }
-                        combinedDecorations.get(cacheKey).push({ range });
+                        combinedDecorations.get(cacheKeyNormal).push({ range });
+                        // 2. Title -> bold
+                        if (title) {
+                            const titleIdx = lineText.indexOf(title, cmdIdx + hashes.length + name.length);
+                            if (titleIdx !== -1) {
+                                const titleStart = new vscode.Position(lineIdx, titleIdx);
+                                const titleEnd = new vscode.Position(lineIdx, titleIdx + title.length);
+                                const titleRange = new vscode.Range(titleStart, titleEnd);
+                                const cacheKeyBold = `${key}-${color}-bold`;
+                                const decTypeBold = getDecorationTypeFor(name, true);
+                                decorationTypes.set(cacheKeyBold, decTypeBold);
+                                if (!combinedDecorations.has(cacheKeyBold)) {
+                                    combinedDecorations.set(cacheKeyBold, []);
+                                }
+                                combinedDecorations.get(cacheKeyBold).push({ range: titleRange });
+                            }
+                        }
                     }
                 }
             }
@@ -276,14 +310,14 @@ function activate(context) {
                                     key = 'generic';
                                 }
                             }
-                            const cacheKey = `${key}-${color}`;
-                            const decType = getDecorationTypeFor(openDir.name);
-                            decorationTypes.set(cacheKey, decType);
-                            if (!combinedDecorations.has(cacheKey)) {
-                                combinedDecorations.set(cacheKey, []);
+                            const cacheKeyNormal = `${key}-${color}-normal`;
+                            const decTypeNormal = getDecorationTypeFor(openDir.name, false);
+                            decorationTypes.set(cacheKeyNormal, decTypeNormal);
+                            if (!combinedDecorations.has(cacheKeyNormal)) {
+                                combinedDecorations.set(cacheKeyNormal, []);
                             }
                             const label = `[-${openDir.name}${openDir.title ? ' ' + openDir.title : ''}]`;
-                            combinedDecorations.get(cacheKey).push({
+                            combinedDecorations.get(cacheKeyNormal).push({
                                 range: range,
                                 renderOptions: {
                                     after: {
