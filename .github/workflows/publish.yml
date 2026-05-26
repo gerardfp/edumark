@@ -33,3 +33,4 @@ jobs:
       - name: Publish to Open VSX Registry
         run: npx ovsx publish -p ${{ secrets.OVSX_PAT }}
         working-directory: packages/vscode-extension
+        continue-on-error: true
