@@ -1,0 +1,13 @@
+# Ignore all files outside the extension directory (parent and sister workspace directories)
+../**
+../../**
+
+# Ignore local configuration and development files
+.vscode/**
+.gitignore
+.vscodeignore
+tsconfig.json
+tsconfig.tsbuildinfo
+src/**
+node_modules/**
+**/*.map
