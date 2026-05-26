@@ -2,15 +2,11 @@
 
 **Edumark** es un lenguaje de marcado educativo y declarativo diseñado específicamente para la creación ágil de materiales didácticos de alta calidad (apuntes, guías, exámenes, rúbricas y hojas de actividades). A partir de archivos fuente sencillos `.edu`, Edumark compila los documentos en páginas HTML modernas, responsivas y con un diseño estético y premium.
 
----
-
-## 🚀 Propósito
-
 El propósito de Edumark es separar el contenido pedagógico de la maquetación visual. Los educadores y creadores de contenido pueden centrarse en la redacción del material (preguntas, actividades, reflexiones y tablas) mediante una sintaxis declarativa intuitiva, mientras que el motor de renderizado de Edumark se encarga de presentarlo en un formato web premium, listo para impresión o visualización interactiva.
 
 ---
 
-## 📦 Características Principales
+## 📦 Características
 
 - **Bloques Didácticos Integrados**: Cajas visualmente estilizadas para llamadas pedagógicas (`💡 ¿Sabías que...?`, `⚠️ Atención`, `🔍 Sugerencia`, `🔑 Solución`, etc.).
 - **Sistema de Preguntas Interactivas**: Soporte para preguntas de selección única o múltiple con sus opciones y explicaciones correspondientes.
@@ -97,6 +93,10 @@ Además, la primera línea de texto de una celda puede albergar un bloque de pro
 | Teléfono Móvil                     | 4.8 segundos                       |
 +------------------------------------+------------------------------------+
 ```
+
+El sistema de coloreado sintáctico en VS Code ofrece soporte completo para múltiples estilos de tablas:
+- **Tablas estilo Ataula**: Soporta bordes definidos con esquinas utilizando el carácter `+` (ej. `+---+---+`).
+- **Tablas estilo Markdown**: Soporta líneas de separación tradicionales y reconoce las indicaciones de alineación con dos puntos `:` (ej. `| :--- | :---: |`).
 
 ### 6. Rúbricas de Evaluación
 Una rúbrica se define envolviendo una tabla geométrica dentro de un bloque `@rubric`:
