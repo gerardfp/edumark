@@ -417,6 +417,10 @@ function renderDirective(node) {
             titleText = 'Nota';
             icon = '📝';
             break;
+        default:
+            titleText = node.name.charAt(0).toUpperCase() + node.name.slice(1);
+            icon = '📝';
+            break;
     }
     if (node.title) {
         titleText += ` — ${node.title}`;

@@ -55,14 +55,9 @@ Define títulos de secciones con la directiva `@section`:
 ### 3. Bloques Didácticos (Cajas de Contenido)
 Permiten resaltar información. Comienzan con `@<nombre-bloque>` y terminan con `@end`.
 
-Tipos de bloques admitidos:
-- `@didyouknow` (💡 ¿Sabías que...?)
-- `@warning` (⚠️ Atención)
-- `@hint` (🔍 Sugerencia)
-- `@solution` (🔑 Solución)
-- `@reflection` (💭 Reflexión)
-- `@activity` (✍️ Actividad)
-- `@note` (📝 Nota)
+Edumark admite bloques predefinidos y bloques personalizados con cualquier nombre (`@xxx`):
+- **Predefinidos**: `@didyouknow` (💡), `@warning` (⚠️), `@hint` (🔍), `@solution` (🔑), `@reflection` (💭), `@activity` (✍️), `@note` (📝).
+- **Personalizados**: Puedes definir bloques con cualquier nombre (ej. `@xxx`), los cuales se renderizarán como cajas con su nombre capitalizado como título por defecto.
 
 **Ejemplo de uso:**
 ```markdown

@@ -25,15 +25,7 @@ export interface ParagraphNode {
   content: string; // contains raw text with inline formatting
 }
 
-export type DirectiveType =
-  | 'didyouknow'
-  | 'warning'
-  | 'hint'
-  | 'solution'
-  | 'reflection'
-  | 'activity'
-  | 'note'
-  | 'section';
+export type DirectiveType = string;
 
 export interface DirectiveBlockNode {
   type: 'directive';

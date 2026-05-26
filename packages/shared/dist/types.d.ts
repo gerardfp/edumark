@@ -14,7 +14,7 @@ export interface ParagraphNode {
     type: 'paragraph';
     content: string;
 }
-export type DirectiveType = 'didyouknow' | 'warning' | 'hint' | 'solution' | 'reflection' | 'activity' | 'note' | 'section';
+export type DirectiveType = string;
 export interface DirectiveBlockNode {
     type: 'directive';
     name: DirectiveType;

@@ -40,7 +40,7 @@
     "directives": {
       "patterns": [
         {
-          "match": "^\\s*(@(section|didyouknow|warning|hint|solution|reflection|activity|note|question|rubric))\\b(.*)$",
+          "match": "^\\s*(@(?!end\\b)[a-zA-Z0-9_\\-]+)\\b(.*)$",
           "captures": {
             "1": { "name": "keyword.control.directive" },
             "3": { "name": "entity.name.section" }
