@@ -2,6 +2,7 @@ export type TokenType =
   | 'FRONTMATTER_BOUNDARY'
   | 'FRONTMATTER_LINE'
   | 'DIRECTIVE_START'
+  | 'HIERARCHICAL_DIRECTIVE_START'
   | 'DIRECTIVE_END'
   | 'CODE_BLOCK_TOGGLE'
   | 'TABLE_LINE'
@@ -64,6 +65,15 @@ export function tokenize(source: string): Token[] {
     if (line.startsWith('@') && !line.startsWith('@end') && /^[a-zA-Z]/.test(line.substring(1))) {
       tokens.push({ type: 'DIRECTIVE_START', text: line, lineNum });
       continue;
+    }
+
+    // Handle Hierarchical Directive Start (e.g. #page or ##page)
+    if (line.startsWith('#')) {
+      const hMatch = line.match(/^(#+)([a-zA-Z0-9_\-]+)(.*)$/);
+      if (hMatch) {
+        tokens.push({ type: 'HIERARCHICAL_DIRECTIVE_START', text: line, lineNum });
+        continue;
+      }
     }
 
     // Handle Directive End

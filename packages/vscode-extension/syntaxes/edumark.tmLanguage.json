@@ -40,6 +40,13 @@
     "directives": {
       "patterns": [
         {
+          "match": "^\\s*(#+[a-zA-Z0-9_\\-]+)\\b(.*)$",
+          "captures": {
+            "1": { "name": "keyword.control.directive" },
+            "2": { "name": "entity.name.section" }
+          }
+        },
+        {
           "match": "^\\s*(@(?!end\\b)[a-zA-Z0-9_\\-]+)\\b(.*)$",
           "captures": {
             "1": { "name": "keyword.control.directive" },

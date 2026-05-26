@@ -95,6 +95,15 @@ function parseBlocks(
   parentDirectives: string[] = []
 ): { nodes: ASTNode[]; closed: boolean } {
   const nodes: ASTNode[] = [];
+  const hStack: { node: any; level: number }[] = [];
+
+  function addNode(node: ASTNode) {
+    if (hStack.length > 0) {
+      hStack[hStack.length - 1].node.children.push(node);
+    } else {
+      nodes.push(node);
+    }
+  }
 
   while (state.idx < tokens.length) {
     const tok = tokens[state.idx];
@@ -134,7 +143,7 @@ function parseBlocks(
         });
       }
 
-      nodes.push({
+      addNode({
         type: 'code-block',
         language,
         content: codeLines.join('\n')
@@ -154,7 +163,7 @@ function parseBlocks(
       try {
         const tableNode = parseGeometricTable(tableLines.join('\n'));
         if (tableNode.cells.length > 0) {
-          nodes.push(tableNode);
+          addNode(tableNode);
         } else {
           errors.push({
             message: 'Estructura de tabla inválida o vacía.',
@@ -184,11 +193,47 @@ function parseBlocks(
         content = itemText.substring(3).trim();
       }
 
-      nodes.push({
+      addNode({
         type: 'list-item',
         checked,
         content
       } as ListItemNode);
+      state.idx++;
+      continue;
+    }
+
+    // Hierarchical Directives
+    if (tok.type === 'HIERARCHICAL_DIRECTIVE_START') {
+      const lineText = tok.text.trim();
+      const match = lineText.match(/^(#+)([a-zA-Z0-9_\-]+)(.*)$/);
+      if (match) {
+        const hashes = match[1];
+        const dirName = match[2];
+        const dirArgsStr = match[3].trim();
+        const level = hashes.length;
+
+        const title = dirArgsStr || undefined;
+        
+        const node: any = {
+          type: 'directive',
+          name: dirName as DirectiveType,
+          title,
+          children: []
+        };
+
+        // Unwind hStack for any level >= new level
+        while (hStack.length > 0 && hStack[hStack.length - 1].level >= level) {
+          hStack.pop();
+        }
+
+        if (hStack.length > 0) {
+          hStack[hStack.length - 1].node.children.push(node);
+        } else {
+          nodes.push(node);
+        }
+
+        hStack.push({ node, level });
+      }
       state.idx++;
       continue;
     }
@@ -223,7 +268,7 @@ function parseBlocks(
 
       if (dirName === 'section') {
         const title = dirArgsStr || undefined;
-        nodes.push({
+        addNode({
           type: 'directive',
           name: 'section',
           title,
@@ -276,7 +321,7 @@ function parseBlocks(
           }
         }
 
-        nodes.push({
+        addNode({
           type: 'question',
           questionType,
           prompt: promptLines.join('\n\n'),
@@ -296,7 +341,7 @@ function parseBlocks(
           }
         }
 
-        nodes.push({
+        addNode({
           type: 'directive',
           name: dirName as DirectiveType,
           title,
@@ -342,7 +387,7 @@ function parseBlocks(
         paragraphLines.push(tokens[state.idx].text);
         state.idx++;
       }
-      nodes.push({
+      addNode({
         type: 'paragraph',
         content: paragraphLines.join('\n')
       });

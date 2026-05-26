@@ -124,7 +124,7 @@ export function activate(context: vscode.ExtensionContext) {
     const document = editor.document;
     const combinedDecorations = new Map<string, vscode.DecorationOptions[]>();
     const decorationTypes = new Map<string, vscode.TextEditorDecorationType>();
-    const stack: { name: string; title: string }[] = [];
+    const stack: { name: string; title: string; level?: number }[] = [];
 
     const config = vscode.workspace.getConfiguration('edumark.colors');
     const standardKeys = [
@@ -181,6 +181,59 @@ export function activate(context: vscode.ExtensionContext) {
           }
         }
       } 
+      // Check hierarchical directive start (e.g. #page or ##page)
+      else if (trimmed.startsWith('#')) {
+        const match = trimmed.match(/^(#+)([a-zA-Z0-9_\-]+)(.*)$/);
+        if (match) {
+          const hashes = match[1];
+          const name = match[2];
+          const title = match[3].trim();
+          const level = hashes.length;
+
+          // Find the last hierarchical directive on the stack with level >= new level
+          let popIdx = -1;
+          for (let i = stack.length - 1; i >= 0; i--) {
+            if (stack[i].level !== undefined && stack[i].level! >= level) {
+              popIdx = i;
+              break;
+            }
+          }
+          if (popIdx !== -1) {
+            while (stack.length > popIdx) {
+              stack.pop();
+            }
+          }
+
+          stack.push({ name, title, level });
+
+          const cmdIdx = lineText.indexOf(hashes + name);
+          if (cmdIdx !== -1) {
+            const startPos = new vscode.Position(lineIdx, cmdIdx);
+            const endPos = new vscode.Position(lineIdx, cmdIdx + hashes.length + name.length);
+            const range = new vscode.Range(startPos, endPos);
+            
+            let color = config.get<string>(name);
+            let key = name;
+            if (!color) {
+              if (standardKeys.includes(name)) {
+                color = config.get<string>(name) || '#3b82f6';
+              } else {
+                color = config.get<string>('generic') || '#8e8e8e';
+                key = 'generic';
+              }
+            }
+            const cacheKey = `${key}-${color}`;
+            
+            const decType = getDecorationTypeFor(name);
+            decorationTypes.set(cacheKey, decType);
+            
+            if (!combinedDecorations.has(cacheKey)) {
+              combinedDecorations.set(cacheKey, []);
+            }
+            combinedDecorations.get(cacheKey)!.push({ range });
+          }
+        }
+      }
       // Check directive end
       else if (trimmed.startsWith('@end')) {
         let closingName: string | undefined = undefined;
@@ -189,7 +242,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         if (stack.length > 0) {
-          let openDir: { name: string; title: string } | undefined = undefined;
+          let openDir: { name: string; title: string; level?: number } | undefined = undefined;
           if (closingName) {
             const idx = stack.map(d => d.name).lastIndexOf(closingName);
             if (idx !== -1) {

@@ -129,4 +129,62 @@ Cuidado con los números primos pequeños.
     expect(errors.length).toBe(1);
     expect(errors[0].message).toContain('Bloque didáctico "@warning" sin cerrar. Se esperaba "@end"');
   });
+
+  it('should parse hierarchical directives with variable levels and implicit closures', () => {
+    const source = `
+#page Pagina 1
+contenido 1
+##page Subpágina 1
+contenido 2
+###page Subsubpágina 2
+contenido 3
+###page Subsubpágina 3
+contenido 4
+##page Subpágina 2
+contenido 5
+#page Pagina 2
+contenido 6
+`.trim();
+
+    const { ast, errors } = parse(source);
+    expect(errors.length).toBe(0);
+    expect(ast.children.length).toBe(2);
+
+    // Page 1
+    const p1 = ast.children[0] as any;
+    expect(p1.type).toBe('directive');
+    expect(p1.name).toBe('page');
+    expect(p1.title).toBe('Pagina 1');
+    expect(p1.children.length).toBe(3); // paragraph 1, subpage 1, subpage 2
+    expect(p1.children[0].type).toBe('paragraph');
+    expect(p1.children[0].content).toBe('contenido 1');
+
+    // Subpage 1
+    const sub1 = p1.children[1];
+    expect(sub1.type).toBe('directive');
+    expect(sub1.name).toBe('page');
+    expect(sub1.title).toBe('Subpágina 1');
+    expect(sub1.children.length).toBe(3); // paragraph 2, subsubpage 2, subsubpage 3
+
+    // Subsubpage 2
+    const subsub2 = sub1.children[1];
+    expect(subsub2.type).toBe('directive');
+    expect(subsub2.name).toBe('page');
+    expect(subsub2.title).toBe('Subsubpágina 2');
+    expect(subsub2.children.length).toBe(1); // paragraph 3
+
+    // Subpage 2
+    const sub2 = p1.children[2];
+    expect(sub2.type).toBe('directive');
+    expect(sub2.name).toBe('page');
+    expect(sub2.title).toBe('Subpágina 2');
+    expect(sub2.children.length).toBe(1); // paragraph 5
+
+    // Page 2
+    const p2 = ast.children[1] as any;
+    expect(p2.type).toBe('directive');
+    expect(p2.name).toBe('page');
+    expect(p2.title).toBe('Pagina 2');
+    expect(p2.children.length).toBe(1); // paragraph 6
+  });
 });
