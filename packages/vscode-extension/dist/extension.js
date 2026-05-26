@@ -38,12 +38,10 @@ exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const parser_1 = require("@edumark/parser");
 const renderer_html_1 = require("@edumark/renderer-html");
+let activeDecorations = {};
 function activate(context) {
     console.log('La extensión Edumark está activa.');
     let previewPanel = undefined;
-    // Create decoration type for @end helper hints
-    const endDecorationType = vscode.window.createTextEditorDecorationType({});
-    context.subscriptions.push(endDecorationType);
     const showPreviewCommand = vscode.commands.registerCommand('edumark.showPreview', () => {
         const activeEditor = vscode.window.activeTextEditor;
         if (!activeEditor || activeEditor.document.languageId !== 'edumark') {
@@ -69,7 +67,7 @@ function activate(context) {
     // Trigger decorations update
     function triggerUpdateDecorations(editor) {
         if (editor && (editor.document.languageId === 'edumark' || editor.document.fileName.endsWith('.edu'))) {
-            updateEndDecorations(editor, endDecorationType);
+            updateEndDecorations(editor);
         }
     }
     // Initial update
@@ -92,9 +90,47 @@ function activate(context) {
             updateWebview(editor.document);
         }
     });
-    function updateEndDecorations(editor, decorationType) {
+    // Update when settings change
+    vscode.workspace.onDidChangeConfiguration(event => {
+        if (event.affectsConfiguration('edumark.colors')) {
+            // Clear cached decorations and dispose them
+            for (const decType of Object.values(activeDecorations)) {
+                decType.dispose();
+            }
+            activeDecorations = {};
+            triggerUpdateDecorations(vscode.window.activeTextEditor);
+        }
+    });
+    function getDecorationTypeFor(name) {
+        const config = vscode.workspace.getConfiguration('edumark.colors');
+        const standardKeys = [
+            'section',
+            'didyouknow',
+            'warning',
+            'hint',
+            'solution',
+            'reflection',
+            'activity',
+            'note',
+            'question',
+            'rubric'
+        ];
+        const key = standardKeys.includes(name) ? name : 'generic';
+        const color = config.get(key) || (key === 'generic' ? '#8e8e8e' : '#3b82f6');
+        const cacheKey = `${key}-${color}`;
+        if (!activeDecorations[cacheKey]) {
+            activeDecorations[cacheKey] = vscode.window.createTextEditorDecorationType({
+                color: color,
+                fontWeight: 'bold'
+            });
+            context.subscriptions.push(activeDecorations[cacheKey]);
+        }
+        return activeDecorations[cacheKey];
+    }
+    function updateEndDecorations(editor) {
         const document = editor.document;
-        const decorations = [];
+        const decorationRanges = {};
+        const hintDecorations = {};
         const stack = [];
         for (let lineIdx = 0; lineIdx < document.lineCount; lineIdx++) {
             const lineText = document.lineAt(lineIdx).text;
@@ -106,6 +142,15 @@ function activate(context) {
                     const name = match[1];
                     const title = match[2].trim();
                     stack.push({ name, title });
+                    const cmdIdx = lineText.indexOf('@' + name);
+                    if (cmdIdx !== -1) {
+                        const startPos = new vscode.Position(lineIdx, cmdIdx);
+                        const endPos = new vscode.Position(lineIdx, cmdIdx + name.length + 1);
+                        const range = new vscode.Range(startPos, endPos);
+                        if (!decorationRanges[name])
+                            decorationRanges[name] = [];
+                        decorationRanges[name].push(range);
+                    }
                 }
             }
             // Check directive end
@@ -114,15 +159,25 @@ function activate(context) {
                     const openDir = stack.pop();
                     const endIdx = lineText.indexOf(trimmed);
                     if (endIdx !== -1) {
-                        const label = `[-${openDir.name}${openDir.title ? ' ' + openDir.title : ''}]`;
                         const startPos = new vscode.Position(lineIdx, endIdx);
                         const endPos = new vscode.Position(lineIdx, endIdx + trimmed.length);
-                        decorations.push({
-                            range: new vscode.Range(startPos, endPos),
+                        const range = new vscode.Range(startPos, endPos);
+                        if (!decorationRanges[openDir.name])
+                            decorationRanges[openDir.name] = [];
+                        decorationRanges[openDir.name].push(range);
+                        const label = `[-${openDir.name}${openDir.title ? ' ' + openDir.title : ''}]`;
+                        const config = vscode.workspace.getConfiguration('edumark.colors');
+                        const standardKeys = ['section', 'didyouknow', 'warning', 'hint', 'solution', 'reflection', 'activity', 'note', 'question', 'rubric'];
+                        const key = standardKeys.includes(openDir.name) ? openDir.name : 'generic';
+                        const baseColor = config.get(key) || (key === 'generic' ? '#8e8e8e' : '#3b82f6');
+                        if (!hintDecorations[openDir.name])
+                            hintDecorations[openDir.name] = [];
+                        hintDecorations[openDir.name].push({
+                            range: range,
                             renderOptions: {
                                 after: {
                                     contentText: ` ${label}`,
-                                    color: 'rgba(150, 150, 150, 0.65)',
+                                    color: baseColor + 'b0', // opacity
                                     fontStyle: 'italic',
                                     margin: '0 0 0 10px'
                                 }
@@ -132,7 +187,28 @@ function activate(context) {
                 }
             }
         }
-        editor.setDecorations(decorationType, decorations);
+        // Clear previous runs of all known decorations
+        for (const decType of Object.values(activeDecorations)) {
+            editor.setDecorations(decType, []);
+        }
+        // Apply new ranges to their corresponding decoration types
+        const allNames = new Set([...Object.keys(decorationRanges), ...Object.keys(hintDecorations)]);
+        for (const name of allNames) {
+            const decType = getDecorationTypeFor(name);
+            const ranges = decorationRanges[name] || [];
+            const hints = hintDecorations[name] || [];
+            const combined = [];
+            for (const r of ranges) {
+                const matchingHint = hints.find(h => h.range.isEqual(r));
+                if (matchingHint) {
+                    combined.push(matchingHint);
+                }
+                else {
+                    combined.push({ range: r });
+                }
+            }
+            editor.setDecorations(decType, combined);
+        }
     }
     function updateWebview(document) {
         if (!previewPanel)
@@ -170,4 +246,9 @@ function activate(context) {
         }
     }
 }
-function deactivate() { }
+function deactivate() {
+    for (const decType of Object.values(activeDecorations)) {
+        decType.dispose();
+    }
+    activeDecorations = {};
+}

@@ -53,6 +53,66 @@
           "when": "resourceLangId == edumark"
         }
       ]
+    },
+    "configuration": {
+      "title": "Edumark",
+      "properties": {
+        "edumark.colors.section": {
+          "type": "string",
+          "default": "#3b82f6",
+          "description": "Color de resaltado para la directiva @section"
+        },
+        "edumark.colors.didyouknow": {
+          "type": "string",
+          "default": "#8b5cf6",
+          "description": "Color de resaltado para la directiva @didyouknow"
+        },
+        "edumark.colors.warning": {
+          "type": "string",
+          "default": "#f97316",
+          "description": "Color de resaltado para la directiva @warning"
+        },
+        "edumark.colors.hint": {
+          "type": "string",
+          "default": "#22c55e",
+          "description": "Color de resaltado para la directiva @hint"
+        },
+        "edumark.colors.solution": {
+          "type": "string",
+          "default": "#a855f7",
+          "description": "Color de resaltado para la directiva @solution"
+        },
+        "edumark.colors.reflection": {
+          "type": "string",
+          "default": "#6366f1",
+          "description": "Color de resaltado para la directiva @reflection"
+        },
+        "edumark.colors.activity": {
+          "type": "string",
+          "default": "#f43f5e",
+          "description": "Color de resaltado para la directiva @activity"
+        },
+        "edumark.colors.note": {
+          "type": "string",
+          "default": "#64748b",
+          "description": "Color de resaltado para la directiva @note"
+        },
+        "edumark.colors.question": {
+          "type": "string",
+          "default": "#14b8a6",
+          "description": "Color de resaltado para la directiva @question"
+        },
+        "edumark.colors.rubric": {
+          "type": "string",
+          "default": "#ec4899",
+          "description": "Color de resaltado para la directiva @rubric"
+        },
+        "edumark.colors.generic": {
+          "type": "string",
+          "default": "#8e8e8e",
+          "description": "Color de resaltado por defecto para directivas arbitrarias o inventadas por el usuario"
+        }
+      }
     }
   },
   "scripts": {

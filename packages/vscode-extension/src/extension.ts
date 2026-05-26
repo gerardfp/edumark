@@ -2,14 +2,12 @@ import * as vscode from 'vscode';
 import { parse } from '@edumark/parser';
 import { renderToHTML } from '@edumark/renderer-html';
 
+let activeDecorations: { [key: string]: vscode.TextEditorDecorationType } = {};
+
 export function activate(context: vscode.ExtensionContext) {
   console.log('La extensión Edumark está activa.');
 
   let previewPanel: vscode.WebviewPanel | undefined = undefined;
-
-  // Create decoration type for @end helper hints
-  const endDecorationType = vscode.window.createTextEditorDecorationType({});
-  context.subscriptions.push(endDecorationType);
 
   const showPreviewCommand = vscode.commands.registerCommand('edumark.showPreview', () => {
     const activeEditor = vscode.window.activeTextEditor;
@@ -45,7 +43,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Trigger decorations update
   function triggerUpdateDecorations(editor: vscode.TextEditor | undefined) {
     if (editor && (editor.document.languageId === 'edumark' || editor.document.fileName.endsWith('.edu'))) {
-      updateEndDecorations(editor, endDecorationType);
+      updateEndDecorations(editor);
     }
   }
 
@@ -72,9 +70,51 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
 
-  function updateEndDecorations(editor: vscode.TextEditor, decorationType: vscode.TextEditorDecorationType) {
+  // Update when settings change
+  vscode.workspace.onDidChangeConfiguration(event => {
+    if (event.affectsConfiguration('edumark.colors')) {
+      // Clear cached decorations and dispose them
+      for (const decType of Object.values(activeDecorations)) {
+        decType.dispose();
+      }
+      activeDecorations = {};
+      triggerUpdateDecorations(vscode.window.activeTextEditor);
+    }
+  });
+
+  function getDecorationTypeFor(name: string): vscode.TextEditorDecorationType {
+    const config = vscode.workspace.getConfiguration('edumark.colors');
+    const standardKeys = [
+      'section',
+      'didyouknow',
+      'warning',
+      'hint',
+      'solution',
+      'reflection',
+      'activity',
+      'note',
+      'question',
+      'rubric'
+    ];
+
+    const key = standardKeys.includes(name) ? name : 'generic';
+    const color = config.get<string>(key) || (key === 'generic' ? '#8e8e8e' : '#3b82f6');
+
+    const cacheKey = `${key}-${color}`;
+    if (!activeDecorations[cacheKey]) {
+      activeDecorations[cacheKey] = vscode.window.createTextEditorDecorationType({
+        color: color,
+        fontWeight: 'bold'
+      });
+      context.subscriptions.push(activeDecorations[cacheKey]);
+    }
+    return activeDecorations[cacheKey];
+  }
+
+  function updateEndDecorations(editor: vscode.TextEditor) {
     const document = editor.document;
-    const decorations: vscode.DecorationOptions[] = [];
+    const decorationRanges: { [key: string]: vscode.Range[] } = {};
+    const hintDecorations: { [key: string]: vscode.DecorationOptions[] } = {};
     const stack: { name: string; title: string }[] = [];
 
     for (let lineIdx = 0; lineIdx < document.lineCount; lineIdx++) {
@@ -88,6 +128,16 @@ export function activate(context: vscode.ExtensionContext) {
           const name = match[1];
           const title = match[2].trim();
           stack.push({ name, title });
+
+          const cmdIdx = lineText.indexOf('@' + name);
+          if (cmdIdx !== -1) {
+            const startPos = new vscode.Position(lineIdx, cmdIdx);
+            const endPos = new vscode.Position(lineIdx, cmdIdx + name.length + 1);
+            const range = new vscode.Range(startPos, endPos);
+            
+            if (!decorationRanges[name]) decorationRanges[name] = [];
+            decorationRanges[name].push(range);
+          }
         }
       } 
       // Check directive end
@@ -96,16 +146,27 @@ export function activate(context: vscode.ExtensionContext) {
           const openDir = stack.pop()!;
           const endIdx = lineText.indexOf(trimmed);
           if (endIdx !== -1) {
-            const label = `[-${openDir.name}${openDir.title ? ' ' + openDir.title : ''}]`;
             const startPos = new vscode.Position(lineIdx, endIdx);
             const endPos = new vscode.Position(lineIdx, endIdx + trimmed.length);
+            const range = new vscode.Range(startPos, endPos);
+            
+            if (!decorationRanges[openDir.name]) decorationRanges[openDir.name] = [];
+            decorationRanges[openDir.name].push(range);
 
-            decorations.push({
-              range: new vscode.Range(startPos, endPos),
+            const label = `[-${openDir.name}${openDir.title ? ' ' + openDir.title : ''}]`;
+            
+            const config = vscode.workspace.getConfiguration('edumark.colors');
+            const standardKeys = ['section', 'didyouknow', 'warning', 'hint', 'solution', 'reflection', 'activity', 'note', 'question', 'rubric'];
+            const key = standardKeys.includes(openDir.name) ? openDir.name : 'generic';
+            const baseColor = config.get<string>(key) || (key === 'generic' ? '#8e8e8e' : '#3b82f6');
+
+            if (!hintDecorations[openDir.name]) hintDecorations[openDir.name] = [];
+            hintDecorations[openDir.name].push({
+              range: range,
               renderOptions: {
                 after: {
                   contentText: ` ${label}`,
-                  color: 'rgba(150, 150, 150, 0.65)',
+                  color: baseColor + 'b0', // opacity
                   fontStyle: 'italic',
                   margin: '0 0 0 10px'
                 }
@@ -116,7 +177,31 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }
 
-    editor.setDecorations(decorationType, decorations);
+    // Clear previous runs of all known decorations
+    for (const decType of Object.values(activeDecorations)) {
+      editor.setDecorations(decType, []);
+    }
+
+    // Apply new ranges to their corresponding decoration types
+    const allNames = new Set([...Object.keys(decorationRanges), ...Object.keys(hintDecorations)]);
+    for (const name of allNames) {
+      const decType = getDecorationTypeFor(name);
+      
+      const ranges = decorationRanges[name] || [];
+      const hints = hintDecorations[name] || [];
+      const combined: vscode.DecorationOptions[] = [];
+      
+      for (const r of ranges) {
+        const matchingHint = hints.find(h => h.range.isEqual(r));
+        if (matchingHint) {
+          combined.push(matchingHint);
+        } else {
+          combined.push({ range: r });
+        }
+      }
+      
+      editor.setDecorations(decType, combined);
+    }
   }
 
   function updateWebview(document: vscode.TextDocument) {
@@ -156,4 +241,9 @@ export function activate(context: vscode.ExtensionContext) {
   }
 }
 
-export function deactivate() {}
+export function deactivate() {
+  for (const decType of Object.values(activeDecorations)) {
+    decType.dispose();
+  }
+  activeDecorations = {};
+}
