@@ -55,7 +55,7 @@
     "tables": {
       "patterns": [
         {
-          "match": "^\\s*([|+])[|\\-+\\s=_:]*([|+])\\s*$",
+          "match": "^\\s*(\\|[|\\-+\\s=_:]*\\|)\\s*$",
           "name": "punctuation.definition.table.border"
         },
         {

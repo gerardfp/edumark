@@ -12,7 +12,7 @@ Descarga la extensión para Visual Studio Code para empezar a trabajar con Eduma
 
 > - **Coloreado Sintáctico**: Resalta las directivas didácticas, metadatos, preguntas y bloques de código.
 > - **Soporte de Tablas**:
->   - **Tablas estilo Edumark / Ataula**: Soporta bordes con esquinas utilizando `|` o `+` (ej. `|---|` o `+---+`).
+>   - **Tablas estilo Edumark / Ataula**: Soporta bordes con `|` (ej. `|---|`).
 >   - **Tablas estilo Markdown**: Soporta líneas de separación y alineaciones con `:` (ej. `| :--- | :---: |`).
 > - **Edición Asistida y Auto-ajuste**: Formatea de forma dinámica las tablas de texto plano mientras escribes para que las columnas se ajusten automáticamente a su contenido.
 > - **Vista Previa en Tiempo Real**: Renderiza el HTML final en un panel lateral de VS Code mientras editas el archivo `.edu`.
@@ -111,7 +111,7 @@ La primera línea de texto de una celda puede albergar un bloque de propiedades 
 ```
 
 El coloreado de sintaxis en VS Code ofrece soporte para múltiples estilos de tablas:
-- **Tablas estilo Edumark / Ataula**: Bordes definidos con esquinas utilizando `|` o `+` (ej. `|---|---|` o `+---+---+`).
+- **Tablas estilo Edumark / Ataula**: Bordes definidos utilizando `|` (ej. `|---|---|`).
 - **Tablas estilo Markdown**: Líneas de separación tradicionales e indicaciones de alineación con dos puntos `:` (ej. `| :--- | :---: |`).
 
 ### 6. Rúbricas de Evaluación
