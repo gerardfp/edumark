@@ -95,21 +95,19 @@ C++ es un lenguaje compilado directamente a código nativo de la CPU, a diferenc
 Edumark procesa tablas en formato de cuadrícula ASCII. El compilador detecta la combinación de columnas (*colspan*) y filas (*rowspan*) si se omiten las líneas divisorias internas.
 La primera línea de texto de una celda puede albergar un bloque de propiedades entre llaves `{}` para aplicar clases CSS (como `.header`) o estilos CSS en línea.
 
+
 **Ejemplo de uso:**
 ```markdown
-|fdsf|fsdf
-|fdsfsd|fdsdf
-
-+------------------------------------+------------------------------------+
+|------------------------------------|------------------------------------|
 | { .header; text-align: center }                                         |
 | Tabla Comparativa de Rendimiento                                        |
-+------------------------------------+------------------------------------+
+|------------------------------------|------------------------------------|
 | Dispositivo                        | Tiempo de Ejecución                |
-+------------------------------------+------------------------------------+
+|------------------------------------|------------------------------------|
 | Ordenador de Sobremesa             | 1.2 segundos                       |
-+------------------------------------+------------------------------------+
+|------------------------------------|------------------------------------|
 | Teléfono Móvil                     | 4.8 segundos                       |
-+------------------------------------+------------------------------------+
+|------------------------------------|------------------------------------|
 ```
 
 El coloreado de sintaxis en VS Code ofrece soporte para múltiples estilos de tablas:
@@ -120,12 +118,12 @@ El coloreado de sintaxis en VS Code ofrece soporte para múltiples estilos de ta
 Una rúbrica se define envolviendo una tabla geométrica dentro de un bloque `@rubric`:
 ```markdown
 @rubric Rúbrica del Proyecto
-+--------------------+--------------------+--------------------+
+|--------------------|--------------------|--------------------|
 | Criterio           | Excelente (3p)     | A mejorar (1p)     |
-+--------------------+--------------------+--------------------+
+|--------------------|--------------------|--------------------|
 | Código             | Estilo impecable y | Estilo desordenado |
 |                    | modularizado.      | y difícil de leer. |
-+--------------------+--------------------+--------------------+
+|--------------------|--------------------|--------------------|
 @end
 ```
 
