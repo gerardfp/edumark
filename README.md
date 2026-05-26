@@ -1,12 +1,30 @@
 # Edumark 📘
 
-**Edumark** es un lenguaje de marcado educativo y declarativo diseñado específicamente para la creación ágil de materiales didácticos de alta calidad (apuntes, guías, exámenes, rúbricas y hojas de actividades). A partir de archivos fuente sencillos `.edu`, Edumark compila los documentos en páginas HTML modernas, responsivas y con un diseño estético y premium.
+**Edumark** es un lenguaje de marcado educativo y declarativo diseñado específicamente para la creación ágil de materiales didácticos de alta calidad (apuntes, guías, exámenes, rúbricas y hojas de actividades). A partir de archivos fuente sencillos con extensión `.edu`, el compilador de Edumark transforma los documentos en páginas HTML modernas, responsivas y con un diseño estético y premium.
 
-El propósito de Edumark es separar el contenido pedagógico de la maquetación visual. Los educadores y creadores de contenido pueden centrarse en la redacción del material (preguntas, actividades, reflexiones y tablas) mediante una sintaxis declarativa intuitiva, mientras que el motor de renderizado de Edumark se encarga de presentarlo en un formato web premium, listo para impresión o visualización interactiva.
+El propósito del lenguaje Edumark es separar el contenido pedagógico de la maquetación visual. Los educadores y creadores de contenido pueden centrarse en la redacción del material (preguntas, actividades, reflexiones y tablas) mediante una sintaxis declarativa intuitiva, mientras que el motor de renderizado de Edumark se encarga de presentarlo en un formato web premium, listo para impresión o visualización interactiva.
 
 ---
 
-## 📦 Características
+## 🔌 Extensión para VS Code
+
+Para facilitar al máximo la creación de documentos Edumark, existe una **extensión oficial para Visual Studio Code** que asiste al creador durante todo el proceso de escritura.
+
+> [!IMPORTANT]
+> **Todas las siguientes características avanzadas de asistencia al redactor y formateo inteligente son proporcionadas por la extensión de VS Code:**
+>
+> - **Coloreado Sintáctico Inteligente**: Resalta de forma clara todas las directivas didácticas, metadatos, bloques de preguntas y bloques de código.
+> - **Soporte de Tablas Multi-Estilo**:
+>   - **Tablas estilo Ataula**: Soporta y resalta bordes definidos con esquinas utilizando el carácter `+` (ej. `+---+---+`).
+>   - **Tablas estilo Markdown**: Soporta líneas de separación tradicionales y reconoce las indicaciones de alineación con dos puntos `:` (ej. `| :--- | :---: |`).
+> - **Edición Asistida y Auto-ajuste**: Formatea de forma dinámica las tablas de texto plano mientras escribes para que las columnas se ajusten automáticamente a su contenido.
+> - **Vista Previa en Tiempo Real**: Abre un panel lateral interactivo que renderiza de forma instantánea el HTML final para ver los cambios en vivo a medida que editas tu archivo `.edu`.
+
+---
+
+## 📦 Características del Lenguaje
+
+El lenguaje Edumark soporta de forma nativa los siguientes elementos pedagógicos y técnicos:
 
 - **Bloques Didácticos Integrados**: Cajas visualmente estilizadas para llamadas pedagógicas (`💡 ¿Sabías que...?`, `⚠️ Atención`, `🔍 Sugerencia`, `🔑 Solución`, etc.).
 - **Sistema de Preguntas Interactivas**: Soporte para preguntas de selección única o múltiple con sus opciones y explicaciones correspondientes.
