@@ -57,6 +57,11 @@
     "configuration": {
       "title": "Edumark",
       "properties": {
+        "edumark.colors.page": {
+          "type": "string",
+          "default": "#8bb2f6",
+          "description": "Color de resaltado para la directiva @page"
+        },
         "edumark.colors.section": {
           "type": "string",
           "default": "#3b82f6",
