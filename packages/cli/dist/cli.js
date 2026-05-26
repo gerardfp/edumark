@@ -47,8 +47,8 @@ program
 // Command: render <file> [-o output]
 program
     .command('render')
-    .description('Compila un archivo .did a HTML')
-    .argument('<archivo>', 'Ruta al archivo .did a compilar')
+    .description('Compila un archivo .edu a HTML')
+    .argument('<archivo>', 'Ruta al archivo .edu a compilar')
     .option('-o, --output <salida>', 'Ruta del archivo HTML resultante')
     .action((filePath, options) => {
     const fullPath = path.resolve(filePath);
@@ -68,7 +68,7 @@ program
     const html = (0, renderer_html_1.renderToHTML)(ast);
     const outputPath = options.output
         ? path.resolve(options.output)
-        : fullPath.replace(/\.did$/, '.html');
+        : fullPath.replace(/\.edu$/, '.html');
     fs.writeFileSync(outputPath, html, 'utf8');
     console.log(`\n✨ Compilado con éxito:`);
     console.log(`   De: ${path.basename(fullPath)}`);
@@ -77,17 +77,17 @@ program
 // Command: build
 program
     .command('build')
-    .description('Compila todos los archivos .did del directorio actual')
+    .description('Compila todos los archivos .edu del directorio actual')
     .action(() => {
     const cwd = process.cwd();
-    const files = fs.readdirSync(cwd).filter(file => file.endsWith('.did'));
+    const files = fs.readdirSync(cwd).filter(file => file.endsWith('.edu'));
     if (files.length === 0) {
-        console.log('No se encontraron archivos .did en el directorio actual.');
+        console.log('No se encontraron archivos .edu en el directorio actual.');
         return;
     }
     let successCount = 0;
     let failCount = 0;
-    console.log(`Compilando archivos .did en: ${cwd}\n`);
+    console.log(`Compilando archivos .edu en: ${cwd}\n`);
     for (const file of files) {
         const fullPath = path.join(cwd, file);
         const source = fs.readFileSync(fullPath, 'utf8');
@@ -101,7 +101,7 @@ program
         }
         else {
             const html = (0, renderer_html_1.renderToHTML)(ast);
-            const outputPath = fullPath.replace(/\.did$/, '.html');
+            const outputPath = fullPath.replace(/\.edu$/, '.html');
             fs.writeFileSync(outputPath, html, 'utf8');
             console.log(`✔ ${file} -> ${path.basename(outputPath)}`);
             successCount++;
@@ -115,8 +115,8 @@ program
 // Command: lint <file>
 program
     .command('lint')
-    .description('Valida la sintaxis de un archivo .did y reporta errores')
-    .argument('<archivo>', 'Ruta al archivo .did a validar')
+    .description('Valida la sintaxis de un archivo .edu y reporta errores')
+    .argument('<archivo>', 'Ruta al archivo .edu a validar')
     .action((filePath) => {
     const fullPath = path.resolve(filePath);
     if (!fs.existsSync(fullPath)) {

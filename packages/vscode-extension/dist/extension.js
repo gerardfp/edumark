@@ -44,7 +44,7 @@ function activate(context) {
     const showPreviewCommand = vscode.commands.registerCommand('edumark.showPreview', () => {
         const activeEditor = vscode.window.activeTextEditor;
         if (!activeEditor || activeEditor.document.languageId !== 'edumark') {
-            vscode.window.showInformationMessage('Abre un archivo .did para ver la vista previa.');
+            vscode.window.showInformationMessage('Abre un archivo .edu para ver la vista previa.');
             return;
         }
         if (previewPanel) {
@@ -71,7 +71,7 @@ function activate(context) {
     });
     // Update preview when active editor changes
     vscode.window.onDidChangeActiveTextEditor(editor => {
-        if (previewPanel && editor && (editor.document.languageId === 'edumark' || editor.document.fileName.endsWith('.did'))) {
+        if (previewPanel && editor && (editor.document.languageId === 'edumark' || editor.document.fileName.endsWith('.edu'))) {
             previewPanel.title = `Vista Previa: ${vscode.workspace.asRelativePath(editor.document.uri)}`;
             updateWebview(editor.document);
         }

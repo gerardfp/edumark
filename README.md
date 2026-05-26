@@ -1,6 +1,6 @@
 # Edumark 📘
 
-**Edumark** es un lenguaje de marcado educativo y declarativo diseñado específicamente para la creación ágil de materiales didácticos de alta calidad (apuntes, guías, exámenes, rúbricas y hojas de actividades). A partir de archivos fuente sencillos `.did`, Edumark compila los documentos en páginas HTML modernas, responsivas y con un diseño estético y premium.
+**Edumark** es un lenguaje de marcado educativo y declarativo diseñado específicamente para la creación ágil de materiales didácticos de alta calidad (apuntes, guías, exámenes, rúbricas y hojas de actividades). A partir de archivos fuente sencillos `.edu`, Edumark compila los documentos en páginas HTML modernas, responsivas y con un diseño estético y premium.
 
 ---
 
@@ -21,9 +21,9 @@ El propósito de Edumark es separar el contenido pedagógico de la maquetación 
 
 ---
 
-## 🛠️ Guía de Sintaxis de Edumark (`.did`)
+## 🛠️ Guía de Sintaxis de Edumark (`.edu`)
 
-Los archivos de Edumark utilizan la extensión `.did`. A continuación, se detalla cómo escribir cada elemento didáctico.
+Los archivos de Edumark utilizan la extensión `.edu`. A continuación, se detalla cómo escribir cada elemento didáctico.
 
 ### 1. Metadatos (Frontmatter)
 Todo documento puede comenzar con un bloque de metadatos encerrado entre `---` para definir las propiedades generales del recurso educativo:
@@ -129,27 +129,27 @@ Una rúbrica se define envolviendo una tabla geométrica dentro de un bloque `@r
 
 ## 💻 Uso de la Herramienta CLI (`edumark`)
 
-Edumark incluye un CLI para compilar archivos `.did` directamente desde la terminal.
+Edumark incluye un CLI para compilar archivos `.edu` directamente desde la terminal.
 
 ### 📌 Comandos Disponibles
 
 #### 1. Compilar un archivo individual a HTML
-Genera un archivo HTML de diseño premium a partir del archivo `.did`:
+Genera un archivo HTML de diseño premium a partir del archivo `.edu`:
 ```bash
-npx edumark render recurso.did -o indice.html
+npx edumark render recurso.edu -o indice.html
 ```
 *Si se omite el flag `-o`, creará un archivo HTML con el mismo nombre y en la misma ubicación que el archivo original (ej. `recurso.html`).*
 
 #### 2. Compilar todos los archivos de un directorio
-Compila automáticamente todos los archivos `.did` presentes en el directorio actual:
+Compila automáticamente todos los archivos `.edu` presentes en el directorio actual:
 ```bash
 npx edumark build
 ```
 
 #### 3. Validar sintaxis (Linting)
-Comprueba si un archivo `.did` contiene errores de sintaxis (como etiquetas o bloques sin cerrar) y reporta la línea exacta del fallo sin generar archivos de salida:
+Comprueba si un archivo `.edu` contiene errores de sintaxis (como etiquetas o bloques sin cerrar) y reporta la línea exacta del fallo sin generar archivos de salida:
 ```bash
-npx edumark lint recurso.did
+npx edumark lint recurso.edu
 ```
 
 ---
@@ -157,8 +157,8 @@ npx edumark lint recurso.did
 ## 🏗️ Estructura del Monorepo
 
 El proyecto está organizado como un monorepo de TypeScript administrado con workspaces de npm:
-- **`packages/parser`**: Analizador léxico y sintáctico (Lexer/Parser) que convierte la sintaxis `.did` en un Árbol de Sintaxis Abstracta (AST).
+- **`packages/parser`**: Analizador léxico y sintáctico (Lexer/Parser) que convierte la sintaxis `.edu` en un Árbol de Sintaxis Abstracta (AST).
 - **`packages/renderer-html`**: Renderizador premium que convierte el AST de Edumark en código HTML optimizado con estilos de diseño modernos y responsivos.
 - **`packages/cli`**: Aplicación de línea de comandos basada en `commander` que implementa las herramientas para el usuario final.
 - **`packages/shared`**: Tipos y definiciones comunes compartidas por los distintos paquetes del proyecto.
-- **`packages/vscode-extension`**: Extensión de Visual Studio Code que dota al editor de soporte de sintaxis y previsualización de documentos `.did`.
+- **`packages/vscode-extension`**: Extensión de Visual Studio Code que dota al editor de soporte de sintaxis y previsualización de documentos `.edu`.

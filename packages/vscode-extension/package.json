@@ -21,14 +21,14 @@
       {
         "id": "edumark",
         "aliases": ["Edumark", "edumark"],
-        "extensions": [".did"],
+        "extensions": [".edu"],
         "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
       {
         "language": "edumark",
-        "scopeName": "source.did",
+        "scopeName": "source.edu",
         "path": "./syntaxes/edumark.tmLanguage.json"
       }
     ],
