@@ -1,44 +1,9 @@
 import * as vscode from 'vscode';
-import { parse } from '@edumark/parser';
-import { renderToHTML } from '@edumark/renderer-html';
 
 let activeDecorations: { [key: string]: vscode.TextEditorDecorationType } = {};
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('La extensión Edumark está activa.');
-
-  let previewPanel: vscode.WebviewPanel | undefined = undefined;
-
-  const showPreviewCommand = vscode.commands.registerCommand('edumark.showPreview', () => {
-    const activeEditor = vscode.window.activeTextEditor;
-    if (!activeEditor || activeEditor.document.languageId !== 'edumark') {
-      vscode.window.showInformationMessage('Abre un archivo .edu para ver la vista previa.');
-      return;
-    }
-
-    if (previewPanel) {
-      previewPanel.reveal(vscode.ViewColumn.Beside);
-      updateWebview(activeEditor.document);
-    } else {
-      previewPanel = vscode.window.createWebviewPanel(
-        'edumarkPreview',
-        `Vista Previa: ${vscode.workspace.asRelativePath(activeEditor.document.uri)}`,
-        vscode.ViewColumn.Beside,
-        {
-          enableScripts: true,
-          retainContextWhenHidden: true
-        }
-      );
-
-      previewPanel.onDidDispose(() => {
-        previewPanel = undefined;
-      });
-
-      updateWebview(activeEditor.document);
-    }
-  });
-
-  context.subscriptions.push(showPreviewCommand);
 
   // CSS Dynamic Highlights Engine
   interface Rule {
@@ -162,7 +127,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   async function loadStylesheets() {
     const rules: Rule[] = [];
-    const files = await vscode.workspace.findFiles('{**/tal.css,**/edumark.css}');
+    const files = await vscode.workspace.findFiles('**/highlight/**/*.css');
     for (const file of files) {
       try {
         const data = await vscode.workspace.fs.readFile(file);
@@ -362,19 +327,14 @@ export function activate(context: vscode.ExtensionContext) {
   // Initial stylesheet load and update
   reloadStylesheetsAndForceUpdate();
 
-  // Watchers for tal.css and edumark.css
-  const watcher1 = vscode.workspace.createFileSystemWatcher('**/tal.css');
-  const watcher2 = vscode.workspace.createFileSystemWatcher('**/edumark.css');
+  // Watcher for any CSS in highlight folders
+  const watcher = vscode.workspace.createFileSystemWatcher('**/highlight/**/*.css');
 
-  watcher1.onDidChange(() => reloadStylesheetsAndForceUpdate());
-  watcher1.onDidCreate(() => reloadStylesheetsAndForceUpdate());
-  watcher1.onDidDelete(() => reloadStylesheetsAndForceUpdate());
+  watcher.onDidChange(() => reloadStylesheetsAndForceUpdate());
+  watcher.onDidCreate(() => reloadStylesheetsAndForceUpdate());
+  watcher.onDidDelete(() => reloadStylesheetsAndForceUpdate());
 
-  watcher2.onDidChange(() => reloadStylesheetsAndForceUpdate());
-  watcher2.onDidCreate(() => reloadStylesheetsAndForceUpdate());
-  watcher2.onDidDelete(() => reloadStylesheetsAndForceUpdate());
-
-  context.subscriptions.push(watcher1, watcher2);
+  context.subscriptions.push(watcher);
 
   // Update when active document changes
   vscode.workspace.onDidChangeTextDocument(event => {
@@ -382,18 +342,11 @@ export function activate(context: vscode.ExtensionContext) {
     if (editor && event.document === editor.document) {
       triggerUpdateDecorations(editor);
     }
-    if (previewPanel && event.document === vscode.window.activeTextEditor?.document) {
-      updateWebview(event.document);
-    }
   });
 
   // Update when active editor changes
   vscode.window.onDidChangeActiveTextEditor(editor => {
     triggerUpdateDecorations(editor);
-    if (previewPanel && editor && (editor.document.languageId === 'edumark' || editor.document.fileName.endsWith('.edu'))) {
-      previewPanel.title = `Vista Previa: ${vscode.workspace.asRelativePath(editor.document.uri)}`;
-      updateWebview(editor.document);
-    }
   });
 
   // Update when settings change
@@ -590,42 +543,6 @@ export function activate(context: vscode.ExtensionContext) {
     for (const [cacheKey, options] of combinedDecorations.entries()) {
       const decType = decorationTypes.get(cacheKey)!;
       editor.setDecorations(decType, options);
-    }
-  }
-
-  function updateWebview(document: vscode.TextDocument) {
-    if (!previewPanel) return;
-
-    try {
-      const source = document.getText();
-      const { ast, errors } = parse(source);
-
-      let html = '';
-      if (errors.length > 0) {
-        html = `<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: sans-serif; padding: 2rem; background: #fff5f5; color: #c53030; }
-    h2 { margin-top: 0; }
-    ul { padding-left: 1.25rem; }
-    li { margin-bottom: 0.5rem; }
-  </style>
-</head>
-<body>
-  <h2>❌ Errores de sintaxis detectados</h2>
-  <ul>
-    ${errors.map(err => `<li><strong>Línea ${err.lineNum}:</strong> ${err.message}</li>`).join('')}
-  </ul>
-</body>
-</html>`;
-      } else {
-        html = renderToHTML(ast);
-      }
-
-      previewPanel.webview.html = html;
-    } catch (err: any) {
-      previewPanel.webview.html = `<h3>Error de renderizado:</h3><pre>${err.message}</pre>`;
     }
   }
 }

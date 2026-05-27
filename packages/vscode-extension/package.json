@@ -43,22 +43,6 @@
         "path": "./snippets/snippets.json"
       }
     ],
-    "commands": [
-      {
-        "command": "edumark.showPreview",
-        "title": "Edumark: Mostrar Vista Previa",
-        "category": "Edumark"
-      }
-    ],
-    "menus": {
-      "editor/title": [
-        {
-          "command": "edumark.showPreview",
-          "group": "navigation",
-          "when": "resourceLangId == edumark"
-        }
-      ]
-    },
     "configuration": {
       "title": "Edumark",
       "properties": {
@@ -133,11 +117,7 @@
   "extensionDependencies": [
     "gerardfp.ataula-vscode-extension"
   ],
-  "dependencies": {
-    "@edumark/shared": "*",
-    "@edumark/parser": "*",
-    "@edumark/renderer-html": "*"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/vscode": "^1.85.0"
   }
