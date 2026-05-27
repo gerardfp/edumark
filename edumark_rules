@@ -6,3 +6,10 @@
     - Apertura #tipo Titulo
     - Cierre la proxima Directivas
     - El tipo es opcional
+
+
+
+Ejemplo directivas:
+symbol: # > @
+type: page, section
+title: Pagina principal

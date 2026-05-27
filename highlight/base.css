@@ -1,0 +1,147 @@
+num {
+    color: rgba(85, 124, 223, 0.669);
+
+    title {
+        color: rgb(85, 124, 223);
+        font-weight: bold;
+    }
+}
+
+percnt {
+    color: rgba(231, 231, 0, 0.776);
+}
+
+num * {
+    color: #8bb2f6a2;
+}
+
+page {
+    color: #8bb2f6a2;
+
+    title {
+        color: rgb(12, 64, 113);
+        font-weight: bold;
+        background-color: rgb(109, 178, 215);
+    }
+}
+
+gt {
+    color: rgba(0, 128, 0, 0.674);
+    font-weight: bold;
+    title {
+        color: rgb(8, 178, 8);
+        font-weight: bold;
+    }
+}
+
+page {
+    color: rgb(187, 187, 187);
+    title{
+        color: white;
+        font-weight: bold;
+    }
+}
+
+section {
+    color: #5590f0b1;
+
+    title {
+        color: #73a8fd;
+        font-weight: bold;
+    }
+}
+
+didyouknow {
+    color: #8b5cf6;
+
+    title {
+        font-weight: bold;
+    }
+}
+
+warning {
+    color: #f97316;
+
+    title {
+        font-weight: bold;
+    }
+}
+
+hint {
+    color: #22c55e;
+
+    title {
+        font-weight: bold;
+    }
+}
+
+solution {
+    color: #a855f7;
+
+    title {
+        font-weight: bold;
+    }
+}
+
+reflection {
+    color: #6366f1;
+
+    title {
+        font-weight: bold;
+    }
+}
+
+activity {
+    color: #f43f5e;
+
+    title {
+        font-weight: bold;
+    }
+}
+
+note {
+    color: #64748b;
+
+    title {
+        font-weight: bold;
+    }
+}
+
+question {
+    color: #14b8a6;
+
+    title {
+        font-weight: bold;
+    }
+}
+
+rubric {
+    color: #ec4899;
+
+    title {
+        font-weight: bold;
+    }
+}
+
+ask_yourself {
+    color: magenta;
+    title {
+        color: magenta;
+    }
+}
+
+pestanas {
+    color: #d935d1;
+
+    title {
+        font-weight: bold;
+    }
+}
+
+generic {
+    color: #d8d8d8;
+
+    title {
+        font-weight: bold;
+    }
+}

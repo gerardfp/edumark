@@ -127,8 +127,25 @@ export function activate(context: vscode.ExtensionContext) {
 
   async function loadStylesheets() {
     const rules: Rule[] = [];
+    
+    // Cargar base.css por defecto desde la carpeta highlight de la extensión
+    const defaultBaseUri = vscode.Uri.joinPath(context.extensionUri, '..', '..', 'highlight', 'base.css');
+    try {
+      const data = await vscode.workspace.fs.readFile(defaultBaseUri);
+      const cssText = Buffer.from(data).toString('utf8');
+      const parsed = parseCSS(cssText);
+      rules.push(...parsed);
+    } catch (e) {
+      console.log('No se pudo cargar base.css desde la extensión, se buscará solo en el espacio de trabajo.');
+    }
+
+    // Cargar cualquier otra hoja de estilo en el espacio de trabajo
     const files = await vscode.workspace.findFiles('**/highlight/**/*.css');
     for (const file of files) {
+      // Evitar cargar base.css dos veces si es el mismo archivo
+      if (file.toString() === defaultBaseUri.toString()) {
+        continue;
+      }
       try {
         const data = await vscode.workspace.fs.readFile(file);
         const cssText = Buffer.from(data).toString('utf8');
@@ -142,18 +159,56 @@ export function activate(context: vscode.ExtensionContext) {
     currentRules = rules;
   }
 
+  const SYMBOL_MAP: Record<string, string> = {
+    '!': 'excl',
+    '"': 'quot',
+    '#': 'num',
+    '$': 'dollar',
+    '%': 'percnt',
+    '&': 'amp',
+    "'": 'apos',
+    '(': 'lparen',
+    ')': 'rparen',
+    '*': 'ast',
+    '+': 'plus',
+    ',': 'comma',
+    '-': 'minus',
+    '.': 'period',
+    '/': 'sol',
+    ':': 'colon',
+    ';': 'semi',
+    '<': 'lt',
+    '=': 'equals',
+    '>': 'gt',
+    '?': 'quest',
+    '@': 'commat',
+    '[': 'lsqb',
+    '\\': 'bsol',
+    ']': 'rsqb',
+    '^': 'Hat',
+    '_': 'lowbar',
+    '`': 'grave',
+    '{': 'lcub',
+    '|': 'verbar',
+    '}': 'rcub',
+    '~': 'tilde'
+  };
+
   function getMarkerAliases(symbol: string): string[] {
-    if (symbol.startsWith('@')) return ['arroba', 'a'];
-    if (symbol.startsWith('#')) return ['almohadilla', 'h'];
-    if (symbol.startsWith('>')) return ['mayor', 'm'];
-    if (symbol.startsWith('%')) return ['porcentaje', 'p'];
-    return [];
+    const char = symbol[0];
+    const name = SYMBOL_MAP[char];
+    const aliases: string[] = [];
+    if (name) {
+      aliases.push(`&${name}`, name);
+    }
+    return aliases;
   }
 
   function getStyleForBase(markerSymbol: string, type: string): Record<string, string> {
     const aliases = getMarkerAliases(markerSymbol);
     const resolved: Record<string, string> = {};
     
+    // 1. Reglas de símbolo independientes (menor prioridad)
     for (const alias of aliases) {
       for (const rule of currentRules) {
         if (rule.selectors.includes(alias)) {
@@ -162,17 +217,27 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }
     
-    if (type) {
+    if (type && type !== 'generic') {
       const typeLower = type.toLowerCase();
+
+      // 2. Regla comodín (alias *)
+      for (const alias of aliases) {
+        const wildcard = `${alias} *`;
+        for (const rule of currentRules) {
+          if (rule.selectors.includes(wildcard)) {
+            Object.assign(resolved, rule.properties);
+          }
+        }
+      }
+
+      // 3. Reglas de tipo específicas (ej. page)
       for (const rule of currentRules) {
         if (rule.selectors.includes(typeLower)) {
           Object.assign(resolved, rule.properties);
         }
       }
-    }
-    
-    if (type) {
-      const typeLower = type.toLowerCase();
+      
+      // 4. Reglas combinadas símbolo + tipo (ej. num page) (mayor prioridad)
       for (const alias of aliases) {
         const combined = `${alias} ${typeLower}`;
         for (const rule of currentRules) {
@@ -181,9 +246,187 @@ export function activate(context: vscode.ExtensionContext) {
           }
         }
       }
+
+      // 5. Fallback para tipos personalizados no estándar -> regla 'generic' (si no se ha establecido un color específico)
+      const standardKeys = [
+        'page', 'section', 'didyouknow', 'warning', 'hint',
+        'solution', 'reflection', 'activity', 'note', 'question', 'rubric'
+      ];
+      if (!standardKeys.includes(typeLower) && !resolved.color) {
+        for (const rule of currentRules) {
+          if (rule.selectors.includes('generic')) {
+            Object.assign(resolved, rule.properties);
+          }
+        }
+      }
+    } else if (type === 'generic' || !type) {
+      if (!resolved.color) {
+        for (const rule of currentRules) {
+          if (rule.selectors.includes('generic')) {
+            Object.assign(resolved, rule.properties);
+          }
+        }
+      }
     }
     
     return resolved;
+  }
+
+  function getStyleForSymbol(markerSymbol: string, type?: string): Record<string, string> {
+    const aliases = getMarkerAliases(markerSymbol);
+    const resolved: Record<string, string> = {};
+    
+    // 1. Reglas de símbolo independientes (menor prioridad)
+    for (const alias of aliases) {
+      for (const rule of currentRules) {
+        if (rule.selectors.includes(alias)) {
+          Object.assign(resolved, rule.properties);
+        }
+      }
+    }
+
+    if (type && type !== 'generic') {
+      const typeLower = type.toLowerCase();
+
+      // 2. Regla comodín (alias *)
+      for (const alias of aliases) {
+        const wildcard = `${alias} *`;
+        for (const rule of currentRules) {
+          if (rule.selectors.includes(wildcard)) {
+            Object.assign(resolved, rule.properties);
+          }
+        }
+      }
+
+      // 3. Reglas de tipo específicas (ej. page)
+      for (const rule of currentRules) {
+        if (rule.selectors.includes(typeLower)) {
+          Object.assign(resolved, rule.properties);
+        }
+      }
+
+      // 4. Reglas combinadas símbolo + tipo (ej. num page) (mayor prioridad)
+      for (const alias of aliases) {
+        const combined = `${alias} ${typeLower}`;
+        for (const rule of currentRules) {
+          if (rule.selectors.includes(combined)) {
+            Object.assign(resolved, rule.properties);
+          }
+        }
+      }
+
+      // 5. Fallback para tipos personalizados no estándar -> regla 'generic' (si no se ha establecido un color específico)
+      const standardKeys = [
+        'page', 'section', 'didyouknow', 'warning', 'hint',
+        'solution', 'reflection', 'activity', 'note', 'question', 'rubric'
+      ];
+      if (!standardKeys.includes(typeLower) && !resolved.color) {
+        for (const rule of currentRules) {
+          if (rule.selectors.includes('generic')) {
+            Object.assign(resolved, rule.properties);
+          }
+        }
+      }
+    } else if (type === 'generic' || !type) {
+      if (!resolved.color) {
+        for (const rule of currentRules) {
+          if (rule.selectors.includes('generic')) {
+            Object.assign(resolved, rule.properties);
+          }
+        }
+      }
+    }
+    return resolved;
+  }
+
+  function attenuateColor(colorStr: string): string {
+    if (!colorStr) return 'rgba(128, 128, 128, 0.5)';
+    const trimmed = colorStr.trim().toLowerCase();
+
+    // 1. Hex color
+    if (trimmed.startsWith('#')) {
+      const hex = trimmed.substring(1);
+      if (hex.length === 3) {
+        const r = parseInt(hex[0] + hex[0], 16);
+        const g = parseInt(hex[1] + hex[1], 16);
+        const b = parseInt(hex[2] + hex[2], 16);
+        return `rgba(${r}, ${g}, ${b}, 0.5)`;
+      }
+      if (hex.length === 4) {
+        const r = parseInt(hex[0] + hex[0], 16);
+        const g = parseInt(hex[1] + hex[1], 16);
+        const b = parseInt(hex[2] + hex[2], 16);
+        const a = parseInt(hex[3] + hex[3], 16) / 255;
+        return `rgba(${r}, ${g}, ${b}, ${a * 0.5})`;
+      }
+      if (hex.length === 6) {
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+        return `rgba(${r}, ${g}, ${b}, 0.5)`;
+      }
+      if (hex.length === 8) {
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+        const a = parseInt(hex.substring(6, 8), 16) / 255;
+        return `rgba(${r}, ${g}, ${b}, ${a * 0.5})`;
+      }
+    }
+
+    // 2. rgb / rgba
+    if (trimmed.startsWith('rgb')) {
+      const match = trimmed.match(/rgba?\s*\(\s*(\d+(?:\.\d+)?%?)\s*,\s*(\d+(?:\.\d+)?%?)\s*,\s*(\d+(?:\.\d+)?%?)(?:\s*,\s*(\d+(?:\.\d+)?%?))?\s*\)/);
+      if (match) {
+        const r = match[1];
+        const g = match[2];
+        const b = match[3];
+        const a = match[4] !== undefined ? parseFloat(match[4]) : 1.0;
+        return `rgba(${r}, ${g}, ${b}, ${a * 0.5})`;
+      }
+    }
+
+    // 3. hsl / hsla
+    if (trimmed.startsWith('hsl')) {
+      const match = trimmed.match(/hsla?\s*\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?%)\s*,\s*(\d+(?:\.\d+)?%)(?:\s*,\s*(\d+(?:\.\d+)?%?))?\s*\)/);
+      if (match) {
+        const h = match[1];
+        const s = match[2];
+        const l = match[3];
+        const a = match[4] !== undefined ? parseFloat(match[4]) : 1.0;
+        return `hsla(${h}, ${s}, ${l}, ${a * 0.5})`;
+      }
+    }
+
+    const colorMap: Record<string, string> = {
+      'red': 'rgba(255, 0, 0, 0.5)',
+      'blue': 'rgba(0, 0, 255, 0.5)',
+      'green': 'rgba(0, 128, 0, 0.5)',
+      'white': 'rgba(255, 255, 255, 0.5)',
+      'black': 'rgba(0, 0, 0, 0.5)',
+      'yellow': 'rgba(255, 255, 0, 0.5)',
+      'magenta': 'rgba(255, 0, 255, 0.5)',
+      'cyan': 'rgba(0, 255, 255, 0.5)',
+      'gray': 'rgba(128, 128, 128, 0.5)',
+      'orange': 'rgba(255, 165, 0, 0.5)'
+    };
+
+    return colorMap[trimmed] || trimmed;
+  }
+
+  function getFinalSymbolStyle(markerSymbol: string, type: string, defaultColor: string): vscode.DecorationRenderOptions {
+    const cssStyle = getStyleForSymbol(markerSymbol, type);
+    const options: vscode.DecorationRenderOptions = {};
+    for (const [key, val] of Object.entries(cssStyle)) {
+      (options as any)[key] = val;
+    }
+    if (!options.color) {
+      options.color = defaultColor;
+    }
+    if (!options.fontWeight) {
+      options.fontWeight = 'normal';
+    }
+    return options;
   }
 
   function getStyleForTitle(markerSymbol: string, type: string, baseStyle: Record<string, string>): Record<string, string> {
@@ -360,7 +603,7 @@ export function activate(context: vscode.ExtensionContext) {
     const document = editor.document;
     const combinedDecorations = new Map<string, vscode.DecorationOptions[]>();
     const decorationTypes = new Map<string, vscode.TextEditorDecorationType>();
-    const stack: { name: string; title: string; level?: number }[] = [];
+    const stack: { name: string; title: string; level?: number; isBlock?: boolean }[] = [];
 
     for (let lineIdx = 0; lineIdx < document.lineCount; lineIdx++) {
       const lineText = document.lineAt(lineIdx).text;
@@ -372,24 +615,38 @@ export function activate(context: vscode.ExtensionContext) {
         if (match) {
           const name = match[1];
           const title = match[2].trim();
-          stack.push({ name, title });
+          stack.push({ name, title, isBlock: true });
 
           const cmdIdx = lineText.indexOf('@' + name);
           if (cmdIdx !== -1) {
-            // 1. Marker and type -> normal style
-            const startPos = new vscode.Position(lineIdx, cmdIdx);
-            const endPos = new vscode.Position(lineIdx, cmdIdx + name.length + 1);
-            const range = new vscode.Range(startPos, endPos);
-            
             const finalBaseStyle = getFinalBaseStyle('@', name);
+            const finalSymbolStyle = getFinalSymbolStyle('@', name, finalBaseStyle.color as string);
+
+            // 1a. Marker symbol range (e.g. '@')
+            const symbolStart = new vscode.Position(lineIdx, cmdIdx);
+            const symbolEnd = new vscode.Position(lineIdx, cmdIdx + 1);
+            const symbolRange = new vscode.Range(symbolStart, symbolEnd);
+
+            const decTypeSymbol = getDecorationType(finalSymbolStyle);
+            const cacheKeySymbol = JSON.stringify(finalSymbolStyle);
+            decorationTypes.set(cacheKeySymbol, decTypeSymbol);
+            if (!combinedDecorations.has(cacheKeySymbol)) {
+              combinedDecorations.set(cacheKeySymbol, []);
+            }
+            combinedDecorations.get(cacheKeySymbol)!.push({ range: symbolRange });
+
+            // 1b. Type range (e.g. 'page')
+            const typeStart = new vscode.Position(lineIdx, cmdIdx + 1);
+            const typeEnd = new vscode.Position(lineIdx, cmdIdx + 1 + name.length);
+            const typeRange = new vscode.Range(typeStart, typeEnd);
+
             const decTypeNormal = getDecorationType(finalBaseStyle);
             const cacheKeyNormal = JSON.stringify(finalBaseStyle);
             decorationTypes.set(cacheKeyNormal, decTypeNormal);
-            
             if (!combinedDecorations.has(cacheKeyNormal)) {
               combinedDecorations.set(cacheKeyNormal, []);
             }
-            combinedDecorations.get(cacheKeyNormal)!.push({ range });
+            combinedDecorations.get(cacheKeyNormal)!.push({ range: typeRange });
 
             // 2. Title -> bold style
             if (title) {
@@ -423,17 +680,10 @@ export function activate(context: vscode.ExtensionContext) {
           const title = (match[3] || '').trim();
           const level = hashes.length;
 
-          // Find the last hierarchical directive on the stack with level >= new level
-          let popIdx = -1;
+          // Cerrar todas las directivas jerárquicas activas cuyo nivel sea mayor o igual al nuevo nivel
           for (let i = stack.length - 1; i >= 0; i--) {
             if (stack[i].level !== undefined && stack[i].level! >= level) {
-              popIdx = i;
-              break;
-            }
-          }
-          if (popIdx !== -1) {
-            while (stack.length > popIdx) {
-              stack.pop();
+              stack.splice(i, 1);
             }
           }
 
@@ -442,20 +692,36 @@ export function activate(context: vscode.ExtensionContext) {
           const cmdText = match[2] ? hashes + name : hashes;
           const cmdIdx = lineText.indexOf(cmdText);
           if (cmdIdx !== -1) {
-            // 1. Marker and type -> normal style
-            const startPos = new vscode.Position(lineIdx, cmdIdx);
-            const endPos = new vscode.Position(lineIdx, cmdIdx + cmdText.length);
-            const range = new vscode.Range(startPos, endPos);
-            
             const finalBaseStyle = getFinalBaseStyle(symbol, name);
-            const decTypeNormal = getDecorationType(finalBaseStyle);
-            const cacheKeyNormal = JSON.stringify(finalBaseStyle);
-            decorationTypes.set(cacheKeyNormal, decTypeNormal);
-            
-            if (!combinedDecorations.has(cacheKeyNormal)) {
-              combinedDecorations.set(cacheKeyNormal, []);
+            const finalSymbolStyle = getFinalSymbolStyle(symbol, name, finalBaseStyle.color as string);
+
+            // 1a. Marker symbol range (e.g. '>')
+            const symbolStart = new vscode.Position(lineIdx, cmdIdx);
+            const symbolEnd = new vscode.Position(lineIdx, cmdIdx + hashes.length);
+            const symbolRange = new vscode.Range(symbolStart, symbolEnd);
+
+            const decTypeSymbol = getDecorationType(finalSymbolStyle);
+            const cacheKeySymbol = JSON.stringify(finalSymbolStyle);
+            decorationTypes.set(cacheKeySymbol, decTypeSymbol);
+            if (!combinedDecorations.has(cacheKeySymbol)) {
+              combinedDecorations.set(cacheKeySymbol, []);
             }
-            combinedDecorations.get(cacheKeyNormal)!.push({ range });
+            combinedDecorations.get(cacheKeySymbol)!.push({ range: symbolRange });
+
+            // 1b. Type range (e.g. 'page' if present)
+            if (match[2]) {
+              const typeStart = new vscode.Position(lineIdx, cmdIdx + hashes.length);
+              const typeEnd = new vscode.Position(lineIdx, cmdIdx + cmdText.length);
+              const typeRange = new vscode.Range(typeStart, typeEnd);
+
+              const decTypeNormal = getDecorationType(finalBaseStyle);
+              const cacheKeyNormal = JSON.stringify(finalBaseStyle);
+              decorationTypes.set(cacheKeyNormal, decTypeNormal);
+              if (!combinedDecorations.has(cacheKeyNormal)) {
+                combinedDecorations.set(cacheKeyNormal, []);
+              }
+              combinedDecorations.get(cacheKeyNormal)!.push({ range: typeRange });
+            }
 
             // 2. Title -> bold style
             if (title) {
@@ -487,16 +753,22 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         if (stack.length > 0) {
-          let openDir: { name: string; title: string; level?: number } | undefined = undefined;
-          if (closingName) {
-            const idx = stack.map(d => d.name).lastIndexOf(closingName);
-            if (idx !== -1) {
-              while (stack.length > idx) {
-                openDir = stack.pop();
+          let openDir: { name: string; title: string; level?: number; isBlock?: boolean } | undefined = undefined;
+          
+          let idx = -1;
+          for (let i = stack.length - 1; i >= 0; i--) {
+            if (stack[i].isBlock) {
+              if (!closingName || stack[i].name === closingName) {
+                idx = i;
+                break;
               }
             }
-          } else {
-            openDir = stack.pop();
+          }
+
+          if (idx !== -1) {
+            while (stack.length > idx) {
+              openDir = stack.pop();
+            }
           }
 
           if (openDir) {
@@ -522,7 +794,7 @@ export function activate(context: vscode.ExtensionContext) {
                 renderOptions: {
                   after: {
                     contentText: ` ${label}`,
-                    color: (finalBaseStyle.color as string) + 'b0', // opacity
+                    color: attenuateColor(finalBaseStyle.color as string),
                     fontStyle: 'italic',
                     margin: '0 0 0 10px'
                   }

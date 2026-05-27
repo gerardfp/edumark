@@ -134,8 +134,20 @@ function activate(context) {
   }
   async function loadStylesheets() {
     const rules = [];
+    const defaultBaseUri = vscode.Uri.joinPath(context.extensionUri, "..", "..", "highlight", "base.css");
+    try {
+      const data = await vscode.workspace.fs.readFile(defaultBaseUri);
+      const cssText = Buffer.from(data).toString("utf8");
+      const parsed = parseCSS(cssText);
+      rules.push(...parsed);
+    } catch (e) {
+      console.log("No se pudo cargar base.css desde la extensi\xF3n, se buscar\xE1 solo en el espacio de trabajo.");
+    }
     const files = await vscode.workspace.findFiles("**/highlight/**/*.css");
     for (const file of files) {
+      if (file.toString() === defaultBaseUri.toString()) {
+        continue;
+      }
       try {
         const data = await vscode.workspace.fs.readFile(file);
         const cssText = Buffer.from(data).toString("utf8");
@@ -148,12 +160,48 @@ function activate(context) {
     processRules(rules);
     currentRules = rules;
   }
+  const SYMBOL_MAP = {
+    "!": "excl",
+    '"': "quot",
+    "#": "num",
+    "$": "dollar",
+    "%": "percnt",
+    "&": "amp",
+    "'": "apos",
+    "(": "lparen",
+    ")": "rparen",
+    "*": "ast",
+    "+": "plus",
+    ",": "comma",
+    "-": "minus",
+    ".": "period",
+    "/": "sol",
+    ":": "colon",
+    ";": "semi",
+    "<": "lt",
+    "=": "equals",
+    ">": "gt",
+    "?": "quest",
+    "@": "commat",
+    "[": "lsqb",
+    "\\": "bsol",
+    "]": "rsqb",
+    "^": "Hat",
+    "_": "lowbar",
+    "`": "grave",
+    "{": "lcub",
+    "|": "verbar",
+    "}": "rcub",
+    "~": "tilde"
+  };
   function getMarkerAliases(symbol) {
-    if (symbol.startsWith("@")) return ["arroba", "a"];
-    if (symbol.startsWith("#")) return ["almohadilla", "h"];
-    if (symbol.startsWith(">")) return ["mayor", "m"];
-    if (symbol.startsWith("%")) return ["porcentaje", "p"];
-    return [];
+    const char = symbol[0];
+    const name = SYMBOL_MAP[char];
+    const aliases = [];
+    if (name) {
+      aliases.push(`&${name}`, name);
+    }
+    return aliases;
   }
   function getStyleForBase(markerSymbol, type) {
     const aliases = getMarkerAliases(markerSymbol);
@@ -165,16 +213,21 @@ function activate(context) {
         }
       }
     }
-    if (type) {
+    if (type && type !== "generic") {
       const typeLower = type.toLowerCase();
+      for (const alias of aliases) {
+        const wildcard = `${alias} *`;
+        for (const rule of currentRules) {
+          if (rule.selectors.includes(wildcard)) {
+            Object.assign(resolved, rule.properties);
+          }
+        }
+      }
       for (const rule of currentRules) {
         if (rule.selectors.includes(typeLower)) {
           Object.assign(resolved, rule.properties);
         }
       }
-    }
-    if (type) {
-      const typeLower = type.toLowerCase();
       for (const alias of aliases) {
         const combined = `${alias} ${typeLower}`;
         for (const rule of currentRules) {
@@ -183,8 +236,180 @@ function activate(context) {
           }
         }
       }
+      const standardKeys = [
+        "page",
+        "section",
+        "didyouknow",
+        "warning",
+        "hint",
+        "solution",
+        "reflection",
+        "activity",
+        "note",
+        "question",
+        "rubric"
+      ];
+      if (!standardKeys.includes(typeLower) && !resolved.color) {
+        for (const rule of currentRules) {
+          if (rule.selectors.includes("generic")) {
+            Object.assign(resolved, rule.properties);
+          }
+        }
+      }
+    } else if (type === "generic" || !type) {
+      if (!resolved.color) {
+        for (const rule of currentRules) {
+          if (rule.selectors.includes("generic")) {
+            Object.assign(resolved, rule.properties);
+          }
+        }
+      }
     }
     return resolved;
+  }
+  function getStyleForSymbol(markerSymbol, type) {
+    const aliases = getMarkerAliases(markerSymbol);
+    const resolved = {};
+    for (const alias of aliases) {
+      for (const rule of currentRules) {
+        if (rule.selectors.includes(alias)) {
+          Object.assign(resolved, rule.properties);
+        }
+      }
+    }
+    if (type && type !== "generic") {
+      const typeLower = type.toLowerCase();
+      for (const alias of aliases) {
+        const wildcard = `${alias} *`;
+        for (const rule of currentRules) {
+          if (rule.selectors.includes(wildcard)) {
+            Object.assign(resolved, rule.properties);
+          }
+        }
+      }
+      for (const rule of currentRules) {
+        if (rule.selectors.includes(typeLower)) {
+          Object.assign(resolved, rule.properties);
+        }
+      }
+      for (const alias of aliases) {
+        const combined = `${alias} ${typeLower}`;
+        for (const rule of currentRules) {
+          if (rule.selectors.includes(combined)) {
+            Object.assign(resolved, rule.properties);
+          }
+        }
+      }
+      const standardKeys = [
+        "page",
+        "section",
+        "didyouknow",
+        "warning",
+        "hint",
+        "solution",
+        "reflection",
+        "activity",
+        "note",
+        "question",
+        "rubric"
+      ];
+      if (!standardKeys.includes(typeLower) && !resolved.color) {
+        for (const rule of currentRules) {
+          if (rule.selectors.includes("generic")) {
+            Object.assign(resolved, rule.properties);
+          }
+        }
+      }
+    } else if (type === "generic" || !type) {
+      if (!resolved.color) {
+        for (const rule of currentRules) {
+          if (rule.selectors.includes("generic")) {
+            Object.assign(resolved, rule.properties);
+          }
+        }
+      }
+    }
+    return resolved;
+  }
+  function attenuateColor(colorStr) {
+    if (!colorStr) return "rgba(128, 128, 128, 0.5)";
+    const trimmed = colorStr.trim().toLowerCase();
+    if (trimmed.startsWith("#")) {
+      const hex = trimmed.substring(1);
+      if (hex.length === 3) {
+        const r = parseInt(hex[0] + hex[0], 16);
+        const g = parseInt(hex[1] + hex[1], 16);
+        const b = parseInt(hex[2] + hex[2], 16);
+        return `rgba(${r}, ${g}, ${b}, 0.5)`;
+      }
+      if (hex.length === 4) {
+        const r = parseInt(hex[0] + hex[0], 16);
+        const g = parseInt(hex[1] + hex[1], 16);
+        const b = parseInt(hex[2] + hex[2], 16);
+        const a = parseInt(hex[3] + hex[3], 16) / 255;
+        return `rgba(${r}, ${g}, ${b}, ${a * 0.5})`;
+      }
+      if (hex.length === 6) {
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+        return `rgba(${r}, ${g}, ${b}, 0.5)`;
+      }
+      if (hex.length === 8) {
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+        const a = parseInt(hex.substring(6, 8), 16) / 255;
+        return `rgba(${r}, ${g}, ${b}, ${a * 0.5})`;
+      }
+    }
+    if (trimmed.startsWith("rgb")) {
+      const match = trimmed.match(/rgba?\s*\(\s*(\d+(?:\.\d+)?%?)\s*,\s*(\d+(?:\.\d+)?%?)\s*,\s*(\d+(?:\.\d+)?%?)(?:\s*,\s*(\d+(?:\.\d+)?%?))?\s*\)/);
+      if (match) {
+        const r = match[1];
+        const g = match[2];
+        const b = match[3];
+        const a = match[4] !== void 0 ? parseFloat(match[4]) : 1;
+        return `rgba(${r}, ${g}, ${b}, ${a * 0.5})`;
+      }
+    }
+    if (trimmed.startsWith("hsl")) {
+      const match = trimmed.match(/hsla?\s*\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?%)\s*,\s*(\d+(?:\.\d+)?%)(?:\s*,\s*(\d+(?:\.\d+)?%?))?\s*\)/);
+      if (match) {
+        const h = match[1];
+        const s = match[2];
+        const l = match[3];
+        const a = match[4] !== void 0 ? parseFloat(match[4]) : 1;
+        return `hsla(${h}, ${s}, ${l}, ${a * 0.5})`;
+      }
+    }
+    const colorMap = {
+      "red": "rgba(255, 0, 0, 0.5)",
+      "blue": "rgba(0, 0, 255, 0.5)",
+      "green": "rgba(0, 128, 0, 0.5)",
+      "white": "rgba(255, 255, 255, 0.5)",
+      "black": "rgba(0, 0, 0, 0.5)",
+      "yellow": "rgba(255, 255, 0, 0.5)",
+      "magenta": "rgba(255, 0, 255, 0.5)",
+      "cyan": "rgba(0, 255, 255, 0.5)",
+      "gray": "rgba(128, 128, 128, 0.5)",
+      "orange": "rgba(255, 165, 0, 0.5)"
+    };
+    return colorMap[trimmed] || trimmed;
+  }
+  function getFinalSymbolStyle(markerSymbol, type, defaultColor) {
+    const cssStyle = getStyleForSymbol(markerSymbol, type);
+    const options = {};
+    for (const [key, val] of Object.entries(cssStyle)) {
+      options[key] = val;
+    }
+    if (!options.color) {
+      options.color = defaultColor;
+    }
+    if (!options.fontWeight) {
+      options.fontWeight = "normal";
+    }
+    return options;
   }
   function getStyleForTitle(markerSymbol, type, baseStyle) {
     const aliases = getMarkerAliases(markerSymbol);
@@ -346,20 +571,31 @@ function activate(context) {
         if (match) {
           const name = match[1];
           const title = match[2].trim();
-          stack.push({ name, title });
+          stack.push({ name, title, isBlock: true });
           const cmdIdx = lineText.indexOf("@" + name);
           if (cmdIdx !== -1) {
-            const startPos = new vscode.Position(lineIdx, cmdIdx);
-            const endPos = new vscode.Position(lineIdx, cmdIdx + name.length + 1);
-            const range = new vscode.Range(startPos, endPos);
             const finalBaseStyle = getFinalBaseStyle("@", name);
+            const finalSymbolStyle = getFinalSymbolStyle("@", name, finalBaseStyle.color);
+            const symbolStart = new vscode.Position(lineIdx, cmdIdx);
+            const symbolEnd = new vscode.Position(lineIdx, cmdIdx + 1);
+            const symbolRange = new vscode.Range(symbolStart, symbolEnd);
+            const decTypeSymbol = getDecorationType(finalSymbolStyle);
+            const cacheKeySymbol = JSON.stringify(finalSymbolStyle);
+            decorationTypes.set(cacheKeySymbol, decTypeSymbol);
+            if (!combinedDecorations.has(cacheKeySymbol)) {
+              combinedDecorations.set(cacheKeySymbol, []);
+            }
+            combinedDecorations.get(cacheKeySymbol).push({ range: symbolRange });
+            const typeStart = new vscode.Position(lineIdx, cmdIdx + 1);
+            const typeEnd = new vscode.Position(lineIdx, cmdIdx + 1 + name.length);
+            const typeRange = new vscode.Range(typeStart, typeEnd);
             const decTypeNormal = getDecorationType(finalBaseStyle);
             const cacheKeyNormal = JSON.stringify(finalBaseStyle);
             decorationTypes.set(cacheKeyNormal, decTypeNormal);
             if (!combinedDecorations.has(cacheKeyNormal)) {
               combinedDecorations.set(cacheKeyNormal, []);
             }
-            combinedDecorations.get(cacheKeyNormal).push({ range });
+            combinedDecorations.get(cacheKeyNormal).push({ range: typeRange });
             if (title) {
               const titleIdx = lineText.indexOf(title, cmdIdx + name.length + 1);
               if (titleIdx !== -1) {
@@ -386,33 +622,39 @@ function activate(context) {
           const name = match[2] || "generic";
           const title = (match[3] || "").trim();
           const level = hashes.length;
-          let popIdx = -1;
           for (let i = stack.length - 1; i >= 0; i--) {
             if (stack[i].level !== void 0 && stack[i].level >= level) {
-              popIdx = i;
-              break;
-            }
-          }
-          if (popIdx !== -1) {
-            while (stack.length > popIdx) {
-              stack.pop();
+              stack.splice(i, 1);
             }
           }
           stack.push({ name, title, level });
           const cmdText = match[2] ? hashes + name : hashes;
           const cmdIdx = lineText.indexOf(cmdText);
           if (cmdIdx !== -1) {
-            const startPos = new vscode.Position(lineIdx, cmdIdx);
-            const endPos = new vscode.Position(lineIdx, cmdIdx + cmdText.length);
-            const range = new vscode.Range(startPos, endPos);
             const finalBaseStyle = getFinalBaseStyle(symbol, name);
-            const decTypeNormal = getDecorationType(finalBaseStyle);
-            const cacheKeyNormal = JSON.stringify(finalBaseStyle);
-            decorationTypes.set(cacheKeyNormal, decTypeNormal);
-            if (!combinedDecorations.has(cacheKeyNormal)) {
-              combinedDecorations.set(cacheKeyNormal, []);
+            const finalSymbolStyle = getFinalSymbolStyle(symbol, name, finalBaseStyle.color);
+            const symbolStart = new vscode.Position(lineIdx, cmdIdx);
+            const symbolEnd = new vscode.Position(lineIdx, cmdIdx + hashes.length);
+            const symbolRange = new vscode.Range(symbolStart, symbolEnd);
+            const decTypeSymbol = getDecorationType(finalSymbolStyle);
+            const cacheKeySymbol = JSON.stringify(finalSymbolStyle);
+            decorationTypes.set(cacheKeySymbol, decTypeSymbol);
+            if (!combinedDecorations.has(cacheKeySymbol)) {
+              combinedDecorations.set(cacheKeySymbol, []);
             }
-            combinedDecorations.get(cacheKeyNormal).push({ range });
+            combinedDecorations.get(cacheKeySymbol).push({ range: symbolRange });
+            if (match[2]) {
+              const typeStart = new vscode.Position(lineIdx, cmdIdx + hashes.length);
+              const typeEnd = new vscode.Position(lineIdx, cmdIdx + cmdText.length);
+              const typeRange = new vscode.Range(typeStart, typeEnd);
+              const decTypeNormal = getDecorationType(finalBaseStyle);
+              const cacheKeyNormal = JSON.stringify(finalBaseStyle);
+              decorationTypes.set(cacheKeyNormal, decTypeNormal);
+              if (!combinedDecorations.has(cacheKeyNormal)) {
+                combinedDecorations.set(cacheKeyNormal, []);
+              }
+              combinedDecorations.get(cacheKeyNormal).push({ range: typeRange });
+            }
             if (title) {
               const titleIdx = lineText.indexOf(title, cmdIdx + cmdText.length);
               if (titleIdx !== -1) {
@@ -438,15 +680,19 @@ function activate(context) {
         }
         if (stack.length > 0) {
           let openDir = void 0;
-          if (closingName) {
-            const idx = stack.map((d) => d.name).lastIndexOf(closingName);
-            if (idx !== -1) {
-              while (stack.length > idx) {
-                openDir = stack.pop();
+          let idx = -1;
+          for (let i = stack.length - 1; i >= 0; i--) {
+            if (stack[i].isBlock) {
+              if (!closingName || stack[i].name === closingName) {
+                idx = i;
+                break;
               }
             }
-          } else {
-            openDir = stack.pop();
+          }
+          if (idx !== -1) {
+            while (stack.length > idx) {
+              openDir = stack.pop();
+            }
           }
           if (openDir) {
             const endIdx = lineText.indexOf(trimmed);
@@ -467,8 +713,7 @@ function activate(context) {
                 renderOptions: {
                   after: {
                     contentText: ` ${label}`,
-                    color: finalBaseStyle.color + "b0",
-                    // opacity
+                    color: attenuateColor(finalBaseStyle.color),
                     fontStyle: "italic",
                     margin: "0 0 0 10px"
                   }
