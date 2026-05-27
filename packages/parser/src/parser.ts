@@ -205,11 +205,11 @@ function parseBlocks(
     // Hierarchical Directives
     if (tok.type === 'HIERARCHICAL_DIRECTIVE_START') {
       const lineText = tok.text.trim();
-      const match = lineText.match(/^(#+)([a-zA-Z0-9_\-]+)(.*)$/);
+      const match = lineText.match(/^([#>%]+)(?:([a-zA-Z0-9_\-]+))?(?:\s+(.*))?$/);
       if (match) {
         const hashes = match[1];
-        const dirName = match[2];
-        const dirArgsStr = match[3].trim();
+        const dirName = match[2] || 'generic';
+        const dirArgsStr = (match[3] || '').trim();
         const level = hashes.length;
 
         const title = dirArgsStr || undefined;

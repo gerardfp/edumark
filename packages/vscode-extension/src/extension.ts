@@ -201,13 +201,13 @@ export function activate(context: vscode.ExtensionContext) {
           }
         }
       } 
-      // Check hierarchical directive start (e.g. #page or ##page)
-      else if (trimmed.startsWith('#')) {
-        const match = trimmed.match(/^(#+)([a-zA-Z0-9_\-]+)(.*)$/);
+      // Check hierarchical directive start (e.g. #page, >warning, %note, or # Titulo)
+      else if (/^[#>%]/.test(trimmed)) {
+        const match = trimmed.match(/^([#>%]+)(?:([a-zA-Z0-9_\-]+))?(?:\s+(.*))?$/);
         if (match) {
           const hashes = match[1];
-          const name = match[2];
-          const title = match[3].trim();
+          const name = match[2] || 'generic';
+          const title = (match[3] || '').trim();
           const level = hashes.length;
 
           // Find the last hierarchical directive on the stack with level >= new level
@@ -226,11 +226,12 @@ export function activate(context: vscode.ExtensionContext) {
 
           stack.push({ name, title, level });
 
-          const cmdIdx = lineText.indexOf(hashes + name);
+          const cmdText = match[2] ? hashes + name : hashes;
+          const cmdIdx = lineText.indexOf(cmdText);
           if (cmdIdx !== -1) {
             // 1. Marker and type -> normal
             const startPos = new vscode.Position(lineIdx, cmdIdx);
-            const endPos = new vscode.Position(lineIdx, cmdIdx + hashes.length + name.length);
+            const endPos = new vscode.Position(lineIdx, cmdIdx + cmdText.length);
             const range = new vscode.Range(startPos, endPos);
             
             let color = config.get<string>(name);
@@ -255,7 +256,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             // 2. Title -> bold
             if (title) {
-              const titleIdx = lineText.indexOf(title, cmdIdx + hashes.length + name.length);
+              const titleIdx = lineText.indexOf(title, cmdIdx + cmdText.length);
               if (titleIdx !== -1) {
                 const titleStart = new vscode.Position(lineIdx, titleIdx);
                 const titleEnd = new vscode.Position(lineIdx, titleIdx + title.length);

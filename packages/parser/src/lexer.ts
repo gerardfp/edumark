@@ -67,9 +67,9 @@ export function tokenize(source: string): Token[] {
       continue;
     }
 
-    // Handle Hierarchical Directive Start (e.g. #page or ##page)
-    if (line.startsWith('#')) {
-      const hMatch = line.match(/^(#+)([a-zA-Z0-9_\-]+)(.*)$/);
+    // Handle Hierarchical Directive Start (e.g. #page, >warning, %note, or # Titulo)
+    if (/^[#>%]/.test(line)) {
+      const hMatch = line.match(/^([#>%]+)(?:([a-zA-Z0-9_\-]+))?(?:\s+(.*))?$/);
       if (hMatch) {
         tokens.push({ type: 'HIERARCHICAL_DIRECTIVE_START', text: line, lineNum });
         continue;

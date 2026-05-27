@@ -448,6 +448,10 @@ function renderDirective(node: DirectiveBlockNode): string {
       titleText = 'Nota';
       icon = '📝';
       break;
+    case 'generic':
+      titleText = '';
+      icon = '📝';
+      break;
     default:
       titleText = node.name.charAt(0).toUpperCase() + node.name.slice(1);
       icon = '📝';
@@ -455,7 +459,7 @@ function renderDirective(node: DirectiveBlockNode): string {
   }
 
   if (node.title) {
-    titleText += ` — ${node.title}`;
+    titleText = titleText ? `${titleText} — ${node.title}` : node.title;
   }
 
   const childHTML = renderNodes(node.children);

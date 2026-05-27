@@ -40,10 +40,11 @@
     "directives": {
       "patterns": [
         {
-          "match": "^\\s*(#+[a-zA-Z0-9_\\-]+)\\b(.*)$",
+          "match": "^\\s*([#>%]+)([a-zA-Z0-9_\\-]+)?(?:\\s+(.*))?$",
           "captures": {
             "1": { "name": "keyword.control.directive" },
-            "2": { "name": "entity.name.section" }
+            "2": { "name": "keyword.control.directive" },
+            "3": { "name": "entity.name.section" }
           }
         },
         {

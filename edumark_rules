@@ -1,0 +1,8 @@
+* Directivas estándar @ 
+    - Apertura @tipo Titulo
+    - Cierre @end
+
+* Directivas jerárquicas con # > %
+    - Apertura #tipo Titulo
+    - Cierre la proxima Directivas
+    - El tipo es opcional
