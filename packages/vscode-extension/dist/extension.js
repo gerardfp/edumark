@@ -1328,12 +1328,291 @@ function activate(context) {
     }
   });
   context.subscriptions.push(showPreviewCommand);
+  let currentRules = [];
+  function kebabToCamel(str) {
+    return str.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+  }
+  function convertProperties(props) {
+    const converted = {};
+    for (const [key, val] of Object.entries(props)) {
+      converted[kebabToCamel(key)] = val;
+    }
+    return converted;
+  }
+  function processRules(rules) {
+    rules.forEach((rule) => {
+      rule.properties = convertProperties(rule.properties);
+      processRules(rule.nested);
+    });
+  }
+  function parseCSS(cssText) {
+    const cleanCss = cssText.replace(/\/\*[\s\S]*?\*\//g, "");
+    let pos = 0;
+    const len = cleanCss.length;
+    function skipWhitespace() {
+      while (pos < len && /\s/.test(cleanCss[pos])) {
+        pos++;
+      }
+    }
+    function parseBlock() {
+      const properties = {};
+      const nested = [];
+      while (pos < len) {
+        skipWhitespace();
+        if (pos >= len) break;
+        if (cleanCss[pos] === "}") {
+          pos++;
+          break;
+        }
+        let start = pos;
+        let hasColon = false;
+        while (pos < len && cleanCss[pos] !== "{" && cleanCss[pos] !== "}" && cleanCss[pos] !== ";") {
+          if (cleanCss[pos] === ":" && !hasColon) {
+            hasColon = true;
+          }
+          pos++;
+        }
+        if (pos >= len) break;
+        const char = cleanCss[pos];
+        if (char === "{") {
+          const selectorText = cleanCss.substring(start, pos).trim();
+          pos++;
+          const block = parseBlock();
+          if (selectorText) {
+            const selectors = selectorText.split(",").map((s) => s.trim().replace(/\s+/g, " ")).filter(Boolean);
+            nested.push({ selectors, properties: block.properties, nested: block.nested });
+          }
+        } else if (char === ";" || char === "}") {
+          const statement = cleanCss.substring(start, pos).trim();
+          if (char === ";") {
+            pos++;
+          }
+          if (statement) {
+            const cIdx = statement.indexOf(":");
+            if (cIdx !== -1) {
+              const name = statement.substring(0, cIdx).trim().toLowerCase();
+              const value = statement.substring(cIdx + 1).trim();
+              properties[name] = value;
+            }
+          }
+        }
+      }
+      return { properties, nested };
+    }
+    const rootRules = [];
+    while (pos < len) {
+      skipWhitespace();
+      if (pos >= len) break;
+      let start = pos;
+      while (pos < len && cleanCss[pos] !== "{" && cleanCss[pos] !== "}") {
+        pos++;
+      }
+      if (pos >= len) break;
+      const selectorText = cleanCss.substring(start, pos).trim();
+      if (cleanCss[pos] === "{") {
+        pos++;
+        const block = parseBlock();
+        if (selectorText) {
+          const selectors = selectorText.split(",").map((s) => s.trim().replace(/\s+/g, " ")).filter(Boolean);
+          rootRules.push({ selectors, properties: block.properties, nested: block.nested });
+        }
+      } else {
+        pos++;
+      }
+    }
+    return rootRules;
+  }
+  async function loadStylesheets() {
+    const rules = [];
+    const files = await vscode.workspace.findFiles("{**/tal.css,**/edumark.css}");
+    for (const file of files) {
+      try {
+        const data = await vscode.workspace.fs.readFile(file);
+        const cssText = Buffer.from(data).toString("utf8");
+        const parsed = parseCSS(cssText);
+        rules.push(...parsed);
+      } catch (e) {
+        console.error("Error loading CSS file:", file.toString(), e);
+      }
+    }
+    processRules(rules);
+    currentRules = rules;
+  }
+  function getMarkerAliases(symbol) {
+    if (symbol.startsWith("@")) return ["arroba", "a"];
+    if (symbol.startsWith("#")) return ["almohadilla", "h"];
+    if (symbol.startsWith(">")) return ["mayor", "m"];
+    if (symbol.startsWith("%")) return ["porcentaje", "p"];
+    return [];
+  }
+  function getStyleForBase(markerSymbol, type) {
+    const aliases = getMarkerAliases(markerSymbol);
+    const resolved = {};
+    for (const alias of aliases) {
+      for (const rule of currentRules) {
+        if (rule.selectors.includes(alias)) {
+          Object.assign(resolved, rule.properties);
+        }
+      }
+    }
+    if (type) {
+      const typeLower = type.toLowerCase();
+      for (const rule of currentRules) {
+        if (rule.selectors.includes(typeLower)) {
+          Object.assign(resolved, rule.properties);
+        }
+      }
+    }
+    if (type) {
+      const typeLower = type.toLowerCase();
+      for (const alias of aliases) {
+        const combined = `${alias} ${typeLower}`;
+        for (const rule of currentRules) {
+          if (rule.selectors.includes(combined)) {
+            Object.assign(resolved, rule.properties);
+          }
+        }
+      }
+    }
+    return resolved;
+  }
+  function getStyleForTitle(markerSymbol, type, baseStyle) {
+    const aliases = getMarkerAliases(markerSymbol);
+    const resolved = { ...baseStyle };
+    for (const rule of currentRules) {
+      if (rule.selectors.includes("title")) {
+        Object.assign(resolved, rule.properties);
+      }
+    }
+    for (const alias of aliases) {
+      for (const rule of currentRules) {
+        if (rule.selectors.includes(alias)) {
+          for (const nest of rule.nested) {
+            if (nest.selectors.includes("title")) {
+              Object.assign(resolved, nest.properties);
+            }
+          }
+        }
+      }
+    }
+    if (type) {
+      const typeLower = type.toLowerCase();
+      for (const rule of currentRules) {
+        if (rule.selectors.includes(typeLower)) {
+          for (const nest of rule.nested) {
+            if (nest.selectors.includes("title")) {
+              Object.assign(resolved, nest.properties);
+            }
+          }
+        }
+      }
+    }
+    if (type) {
+      const typeLower = type.toLowerCase();
+      for (const alias of aliases) {
+        const combined = `${alias} ${typeLower}`;
+        for (const rule of currentRules) {
+          if (rule.selectors.includes(combined)) {
+            for (const nest of rule.nested) {
+              if (nest.selectors.includes("title")) {
+                Object.assign(resolved, nest.properties);
+              }
+            }
+          }
+        }
+      }
+    }
+    return resolved;
+  }
+  function getFinalBaseStyle(markerSymbol, type) {
+    const cssStyle = getStyleForBase(markerSymbol, type);
+    const config = vscode.workspace.getConfiguration("edumark.colors");
+    const standardKeys = [
+      "page",
+      "section",
+      "didyouknow",
+      "warning",
+      "hint",
+      "solution",
+      "reflection",
+      "activity",
+      "note",
+      "question",
+      "rubric"
+    ];
+    let defaultColor = config.get(type);
+    if (!defaultColor) {
+      if (standardKeys.includes(type)) {
+        defaultColor = config.get(type) || "#3b82f6";
+      } else {
+        defaultColor = config.get("generic") || "#8e8e8e";
+      }
+    }
+    const options = {};
+    for (const [key, val] of Object.entries(cssStyle)) {
+      options[key] = val;
+    }
+    if (!options.color) {
+      options.color = defaultColor;
+    }
+    if (!options.fontWeight) {
+      options.fontWeight = "normal";
+    }
+    return options;
+  }
+  function getFinalTitleStyle(markerSymbol, type, finalBaseStyle) {
+    const baseCssStyle = getStyleForBase(markerSymbol, type);
+    const cssStyle = getStyleForTitle(markerSymbol, type, baseCssStyle);
+    const options = {};
+    for (const [key, val] of Object.entries(cssStyle)) {
+      options[key] = val;
+    }
+    if (!options.color) {
+      options.color = finalBaseStyle.color;
+    }
+    if (!options.fontWeight) {
+      options.fontWeight = "bold";
+    }
+    return options;
+  }
+  function getDecorationType(options) {
+    const sortedOptions = {};
+    Object.keys(options).sort().forEach((key) => {
+      sortedOptions[key] = options[key];
+    });
+    const cacheKey = JSON.stringify(sortedOptions);
+    if (!activeDecorations[cacheKey]) {
+      activeDecorations[cacheKey] = vscode.window.createTextEditorDecorationType(options);
+      context.subscriptions.push(activeDecorations[cacheKey]);
+    }
+    return activeDecorations[cacheKey];
+  }
   function triggerUpdateDecorations(editor) {
     if (editor && (editor.document.languageId === "edumark" || editor.document.fileName.endsWith(".edu"))) {
       updateEndDecorations(editor);
     }
   }
-  triggerUpdateDecorations(vscode.window.activeTextEditor);
+  async function reloadStylesheetsAndForceUpdate() {
+    await loadStylesheets();
+    for (const decType of Object.values(activeDecorations)) {
+      decType.dispose();
+    }
+    activeDecorations = {};
+    const editor = vscode.window.activeTextEditor;
+    if (editor) {
+      triggerUpdateDecorations(editor);
+    }
+  }
+  reloadStylesheetsAndForceUpdate();
+  const watcher1 = vscode.workspace.createFileSystemWatcher("**/tal.css");
+  const watcher2 = vscode.workspace.createFileSystemWatcher("**/edumark.css");
+  watcher1.onDidChange(() => reloadStylesheetsAndForceUpdate());
+  watcher1.onDidCreate(() => reloadStylesheetsAndForceUpdate());
+  watcher1.onDidDelete(() => reloadStylesheetsAndForceUpdate());
+  watcher2.onDidChange(() => reloadStylesheetsAndForceUpdate());
+  watcher2.onDidCreate(() => reloadStylesheetsAndForceUpdate());
+  watcher2.onDidDelete(() => reloadStylesheetsAndForceUpdate());
+  context.subscriptions.push(watcher1, watcher2);
   vscode.workspace.onDidChangeTextDocument((event) => {
     const editor = vscode.window.activeTextEditor;
     if (editor && event.document === editor.document) {
@@ -1352,67 +1631,14 @@ function activate(context) {
   });
   vscode.workspace.onDidChangeConfiguration((event) => {
     if (event.affectsConfiguration("edumark.colors")) {
-      for (const decType of Object.values(activeDecorations)) {
-        decType.dispose();
-      }
-      activeDecorations = {};
-      triggerUpdateDecorations(vscode.window.activeTextEditor);
+      reloadStylesheetsAndForceUpdate();
     }
   });
-  function getDecorationTypeFor(name, bold = false) {
-    const config = vscode.workspace.getConfiguration("edumark.colors");
-    const standardKeys = [
-      "page",
-      "section",
-      "didyouknow",
-      "warning",
-      "hint",
-      "solution",
-      "reflection",
-      "activity",
-      "note",
-      "question",
-      "rubric"
-    ];
-    let color = config.get(name);
-    let key = name;
-    if (!color) {
-      if (standardKeys.includes(name)) {
-        color = config.get(name) || "#3b82f6";
-      } else {
-        color = config.get("generic") || "#8e8e8e";
-        key = "generic";
-      }
-    }
-    const cacheKey = `${key}-${color}-${bold ? "bold" : "normal"}`;
-    if (!activeDecorations[cacheKey]) {
-      activeDecorations[cacheKey] = vscode.window.createTextEditorDecorationType({
-        color,
-        fontWeight: bold ? "bold" : "normal"
-      });
-      context.subscriptions.push(activeDecorations[cacheKey]);
-    }
-    return activeDecorations[cacheKey];
-  }
   function updateEndDecorations(editor) {
     const document = editor.document;
     const combinedDecorations = /* @__PURE__ */ new Map();
     const decorationTypes = /* @__PURE__ */ new Map();
     const stack = [];
-    const config = vscode.workspace.getConfiguration("edumark.colors");
-    const standardKeys = [
-      "page",
-      "section",
-      "didyouknow",
-      "warning",
-      "hint",
-      "solution",
-      "reflection",
-      "activity",
-      "note",
-      "question",
-      "rubric"
-    ];
     for (let lineIdx = 0; lineIdx < document.lineCount; lineIdx++) {
       const lineText = document.lineAt(lineIdx).text;
       const trimmed = lineText.trim();
@@ -1427,18 +1653,9 @@ function activate(context) {
             const startPos = new vscode.Position(lineIdx, cmdIdx);
             const endPos = new vscode.Position(lineIdx, cmdIdx + name.length + 1);
             const range = new vscode.Range(startPos, endPos);
-            let color = config.get(name);
-            let key = name;
-            if (!color) {
-              if (standardKeys.includes(name)) {
-                color = config.get(name) || "#3b82f6";
-              } else {
-                color = config.get("generic") || "#8e8e8e";
-                key = "generic";
-              }
-            }
-            const cacheKeyNormal = `${key}-${color}-normal`;
-            const decTypeNormal = getDecorationTypeFor(name, false);
+            const finalBaseStyle = getFinalBaseStyle("@", name);
+            const decTypeNormal = getDecorationType(finalBaseStyle);
+            const cacheKeyNormal = JSON.stringify(finalBaseStyle);
             decorationTypes.set(cacheKeyNormal, decTypeNormal);
             if (!combinedDecorations.has(cacheKeyNormal)) {
               combinedDecorations.set(cacheKeyNormal, []);
@@ -1450,8 +1667,9 @@ function activate(context) {
                 const titleStart = new vscode.Position(lineIdx, titleIdx);
                 const titleEnd = new vscode.Position(lineIdx, titleIdx + title.length);
                 const titleRange = new vscode.Range(titleStart, titleEnd);
-                const cacheKeyBold = `${key}-${color}-bold`;
-                const decTypeBold = getDecorationTypeFor(name, true);
+                const finalTitleStyle = getFinalTitleStyle("@", name, finalBaseStyle);
+                const decTypeBold = getDecorationType(finalTitleStyle);
+                const cacheKeyBold = JSON.stringify(finalTitleStyle);
                 decorationTypes.set(cacheKeyBold, decTypeBold);
                 if (!combinedDecorations.has(cacheKeyBold)) {
                   combinedDecorations.set(cacheKeyBold, []);
@@ -1465,6 +1683,7 @@ function activate(context) {
         const match = trimmed.match(/^([#>%]+)(?:([a-zA-Z0-9_\-]+))?(?:\s+(.*))?$/);
         if (match) {
           const hashes = match[1];
+          const symbol = hashes[0];
           const name = match[2] || "generic";
           const title = (match[3] || "").trim();
           const level = hashes.length;
@@ -1487,18 +1706,9 @@ function activate(context) {
             const startPos = new vscode.Position(lineIdx, cmdIdx);
             const endPos = new vscode.Position(lineIdx, cmdIdx + cmdText.length);
             const range = new vscode.Range(startPos, endPos);
-            let color = config.get(name);
-            let key = name;
-            if (!color) {
-              if (standardKeys.includes(name)) {
-                color = config.get(name) || "#3b82f6";
-              } else {
-                color = config.get("generic") || "#8e8e8e";
-                key = "generic";
-              }
-            }
-            const cacheKeyNormal = `${key}-${color}-normal`;
-            const decTypeNormal = getDecorationTypeFor(name, false);
+            const finalBaseStyle = getFinalBaseStyle(symbol, name);
+            const decTypeNormal = getDecorationType(finalBaseStyle);
+            const cacheKeyNormal = JSON.stringify(finalBaseStyle);
             decorationTypes.set(cacheKeyNormal, decTypeNormal);
             if (!combinedDecorations.has(cacheKeyNormal)) {
               combinedDecorations.set(cacheKeyNormal, []);
@@ -1510,8 +1720,9 @@ function activate(context) {
                 const titleStart = new vscode.Position(lineIdx, titleIdx);
                 const titleEnd = new vscode.Position(lineIdx, titleIdx + title.length);
                 const titleRange = new vscode.Range(titleStart, titleEnd);
-                const cacheKeyBold = `${key}-${color}-bold`;
-                const decTypeBold = getDecorationTypeFor(name, true);
+                const finalTitleStyle = getFinalTitleStyle(symbol, name, finalBaseStyle);
+                const decTypeBold = getDecorationType(finalTitleStyle);
+                const cacheKeyBold = JSON.stringify(finalTitleStyle);
                 decorationTypes.set(cacheKeyBold, decTypeBold);
                 if (!combinedDecorations.has(cacheKeyBold)) {
                   combinedDecorations.set(cacheKeyBold, []);
@@ -1544,18 +1755,9 @@ function activate(context) {
               const startPos = new vscode.Position(lineIdx, endIdx);
               const endPos = new vscode.Position(lineIdx, endIdx + trimmed.length);
               const range = new vscode.Range(startPos, endPos);
-              let color = config.get(openDir.name);
-              let key = openDir.name;
-              if (!color) {
-                if (standardKeys.includes(openDir.name)) {
-                  color = config.get(openDir.name) || "#3b82f6";
-                } else {
-                  color = config.get("generic") || "#8e8e8e";
-                  key = "generic";
-                }
-              }
-              const cacheKeyNormal = `${key}-${color}-normal`;
-              const decTypeNormal = getDecorationTypeFor(openDir.name, false);
+              const finalBaseStyle = getFinalBaseStyle("@", openDir.name);
+              const decTypeNormal = getDecorationType(finalBaseStyle);
+              const cacheKeyNormal = JSON.stringify(finalBaseStyle);
               decorationTypes.set(cacheKeyNormal, decTypeNormal);
               if (!combinedDecorations.has(cacheKeyNormal)) {
                 combinedDecorations.set(cacheKeyNormal, []);
@@ -1566,7 +1768,7 @@ function activate(context) {
                 renderOptions: {
                   after: {
                     contentText: ` ${label}`,
-                    color: color + "b0",
+                    color: finalBaseStyle.color + "b0",
                     // opacity
                     fontStyle: "italic",
                     margin: "0 0 0 10px"
