@@ -125,36 +125,49 @@ export function activate(context: vscode.ExtensionContext) {
     return rootRules;
   }
 
+  async function readCssContent(uri: vscode.Uri): Promise<string> {
+    // Check if the document is currently open in VS Code (which gives us unsaved buffer content!)
+    const openDoc = vscode.workspace.textDocuments.find(doc => doc.uri.toString() === uri.toString());
+    if (openDoc) {
+      return openDoc.getText();
+    }
+    // Otherwise read from disk
+    const data = await vscode.workspace.fs.readFile(uri);
+    return Buffer.from(data).toString('utf8');
+  }
+
   async function loadStylesheets() {
     const rules: Rule[] = [];
-    
-    // Cargar base.css por defecto desde la carpeta highlight de la extensión
-    const defaultBaseUri = vscode.Uri.joinPath(context.extensionUri, '..', '..', 'highlight', 'base.css');
-    try {
-      const data = await vscode.workspace.fs.readFile(defaultBaseUri);
-      const cssText = Buffer.from(data).toString('utf8');
-      const parsed = parseCSS(cssText);
-      rules.push(...parsed);
-    } catch (e) {
-      console.log('No se pudo cargar base.css desde la extensión, se buscará solo en el espacio de trabajo.');
+    let loadedProjectCss = false;
+
+    // 1. Buscar en la carpeta del proyecto ".config/hightlight" o ".config/highlight"
+    const projectFiles = await vscode.workspace.findFiles('{**/.config/hightlight/**/*.css,**/.config/highlight/**/*.css}');
+    for (const file of projectFiles) {
+      try {
+        const cssText = await readCssContent(file);
+        const parsed = parseCSS(cssText);
+        rules.push(...parsed);
+        loadedProjectCss = true;
+        console.log('Cargado CSS del proyecto:', file.toString());
+      } catch (e) {
+        console.error('Error al cargar CSS del proyecto:', file.toString(), e);
+      }
     }
 
-    // Cargar cualquier otra hoja de estilo en el espacio de trabajo
-    const files = await vscode.workspace.findFiles('**/highlight/**/*.css');
-    for (const file of files) {
-      // Evitar cargar base.css dos veces si es el mismo archivo
-      if (file.toString() === defaultBaseUri.toString()) {
-        continue;
-      }
+    // 2. Si no se cargó ningún CSS de proyecto, cargar el base.css de la extensión por defecto
+    if (!loadedProjectCss) {
+      const defaultBaseUri = vscode.Uri.joinPath(context.extensionUri, '..', '..', 'highlight', 'base.css');
       try {
-        const data = await vscode.workspace.fs.readFile(file);
+        const data = await vscode.workspace.fs.readFile(defaultBaseUri);
         const cssText = Buffer.from(data).toString('utf8');
         const parsed = parseCSS(cssText);
         rules.push(...parsed);
+        console.log('Cargado base.css de la extensión por defecto.');
       } catch (e) {
-        console.error('Error loading CSS file:', file.toString(), e);
+        console.log('No se pudo cargar base.css desde la extensión.');
       }
     }
+
     processRules(rules);
     currentRules = rules;
   }
@@ -220,20 +233,20 @@ export function activate(context: vscode.ExtensionContext) {
     if (type && type !== 'generic') {
       const typeLower = type.toLowerCase();
 
-      // 2. Regla comodín (alias *)
+      // 2. Reglas de tipo específicas (ej. page)
+      for (const rule of currentRules) {
+        if (rule.selectors.includes(typeLower)) {
+          Object.assign(resolved, rule.properties);
+        }
+      }
+
+      // 3. Regla comodín (alias *)
       for (const alias of aliases) {
         const wildcard = `${alias} *`;
         for (const rule of currentRules) {
           if (rule.selectors.includes(wildcard)) {
             Object.assign(resolved, rule.properties);
           }
-        }
-      }
-
-      // 3. Reglas de tipo específicas (ej. page)
-      for (const rule of currentRules) {
-        if (rule.selectors.includes(typeLower)) {
-          Object.assign(resolved, rule.properties);
         }
       }
       
@@ -288,20 +301,20 @@ export function activate(context: vscode.ExtensionContext) {
     if (type && type !== 'generic') {
       const typeLower = type.toLowerCase();
 
-      // 2. Regla comodín (alias *)
+      // 2. Reglas de tipo específicas (ej. page)
+      for (const rule of currentRules) {
+        if (rule.selectors.includes(typeLower)) {
+          Object.assign(resolved, rule.properties);
+        }
+      }
+
+      // 3. Regla comodín (alias *)
       for (const alias of aliases) {
         const wildcard = `${alias} *`;
         for (const rule of currentRules) {
           if (rule.selectors.includes(wildcard)) {
             Object.assign(resolved, rule.properties);
           }
-        }
-      }
-
-      // 3. Reglas de tipo específicas (ej. page)
-      for (const rule of currentRules) {
-        if (rule.selectors.includes(typeLower)) {
-          Object.assign(resolved, rule.properties);
         }
       }
 
@@ -561,8 +574,7 @@ export function activate(context: vscode.ExtensionContext) {
       decType.dispose();
     }
     activeDecorations = {};
-    const editor = vscode.window.activeTextEditor;
-    if (editor) {
+    for (const editor of vscode.window.visibleTextEditors) {
       triggerUpdateDecorations(editor);
     }
   }
@@ -570,8 +582,8 @@ export function activate(context: vscode.ExtensionContext) {
   // Initial stylesheet load and update
   reloadStylesheetsAndForceUpdate();
 
-  // Watcher for any CSS in highlight folders
-  const watcher = vscode.workspace.createFileSystemWatcher('**/highlight/**/*.css');
+  // Watcher for any CSS in project highlight folders (filesystem events)
+  const watcher = vscode.workspace.createFileSystemWatcher('{**/.config/hightlight/**/*.css,**/.config/highlight/**/*.css}');
 
   watcher.onDidChange(() => reloadStylesheetsAndForceUpdate());
   watcher.onDidCreate(() => reloadStylesheetsAndForceUpdate());
@@ -579,11 +591,19 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(watcher);
 
-  // Update when active document changes
+  // Update when any document changes (real-time keystroke rendering!)
   vscode.workspace.onDidChangeTextDocument(event => {
-    const editor = vscode.window.activeTextEditor;
-    if (editor && event.document === editor.document) {
-      triggerUpdateDecorations(editor);
+    const isCss = event.document.uri.path.endsWith('.css');
+    const inHighlightFolder = event.document.uri.path.includes('/.config/highlight/') || event.document.uri.path.includes('/.config/hightlight/');
+
+    if (isCss && inHighlightFolder) {
+      // Keystroke-level updates for custom highlights! Reloads stylesheets from memory and refreshes visible editors.
+      reloadStylesheetsAndForceUpdate();
+    } else {
+      const editor = vscode.window.activeTextEditor;
+      if (editor && event.document === editor.document) {
+        triggerUpdateDecorations(editor);
+      }
     }
   });
 
@@ -605,7 +625,83 @@ export function activate(context: vscode.ExtensionContext) {
     const decorationTypes = new Map<string, vscode.TextEditorDecorationType>();
     const stack: { name: string; title: string; level?: number; isBlock?: boolean }[] = [];
 
-    for (let lineIdx = 0; lineIdx < document.lineCount; lineIdx++) {
+    let startLineIdx = 0;
+    if (document.lineCount > 0 && document.lineAt(0).text.trim() === '---') {
+      const sepStyle = { color: '#808080', fontWeight: 'bold' };
+      const decTypeSep = getDecorationType(sepStyle);
+      const cacheKeySep = JSON.stringify(sepStyle);
+      decorationTypes.set(cacheKeySep, decTypeSep);
+      if (!combinedDecorations.has(cacheKeySep)) {
+        combinedDecorations.set(cacheKeySep, []);
+      }
+      combinedDecorations.get(cacheKeySep)!.push({
+        range: new vscode.Range(new vscode.Position(0, 0), new vscode.Position(0, document.lineAt(0).text.length))
+      });
+
+      startLineIdx = 1;
+      while (startLineIdx < document.lineCount) {
+        const lineText = document.lineAt(startLineIdx).text;
+        const trimmed = lineText.trim();
+        if (trimmed === '---') {
+          combinedDecorations.get(cacheKeySep)!.push({
+            range: new vscode.Range(new vscode.Position(startLineIdx, 0), new vscode.Position(startLineIdx, lineText.length))
+          });
+          startLineIdx++;
+          break;
+        }
+        if (trimmed === '') {
+          startLineIdx++;
+          continue;
+        }
+
+        const keyMatch = lineText.match(/^([a-zA-Z_][a-zA-Z0-9_]*):(.*)$/);
+        if (keyMatch) {
+          const key = keyMatch[1];
+          const rest = keyMatch[2];
+
+          // 1. Key range (light blue)
+          const keyStyle = { color: '#4fc1ff' };
+          const decTypeKey = getDecorationType(keyStyle);
+          const cacheKeyKey = JSON.stringify(keyStyle);
+          decorationTypes.set(cacheKeyKey, decTypeKey);
+          if (!combinedDecorations.has(cacheKeyKey)) {
+            combinedDecorations.set(cacheKeyKey, []);
+          }
+          combinedDecorations.get(cacheKeyKey)!.push({
+            range: new vscode.Range(new vscode.Position(startLineIdx, 0), new vscode.Position(startLineIdx, key.length + 1))
+          });
+
+          // 2. Rest of line range (orange/brown string)
+          if (rest.length > 0) {
+            const stringStyle = { color: '#ce9178' };
+            const decTypeStr = getDecorationType(stringStyle);
+            const cacheKeyStr = JSON.stringify(stringStyle);
+            decorationTypes.set(cacheKeyStr, decTypeStr);
+            if (!combinedDecorations.has(cacheKeyStr)) {
+              combinedDecorations.set(cacheKeyStr, []);
+            }
+            combinedDecorations.get(cacheKeyStr)!.push({
+              range: new vscode.Range(new vscode.Position(startLineIdx, key.length + 1), new vscode.Position(startLineIdx, lineText.length))
+            });
+          }
+        } else {
+          // Wildcard string line range
+          const stringStyle = { color: '#ce9178' };
+          const decTypeStr = getDecorationType(stringStyle);
+          const cacheKeyStr = JSON.stringify(stringStyle);
+          decorationTypes.set(cacheKeyStr, decTypeStr);
+          if (!combinedDecorations.has(cacheKeyStr)) {
+            combinedDecorations.set(cacheKeyStr, []);
+          }
+          combinedDecorations.get(cacheKeyStr)!.push({
+            range: new vscode.Range(new vscode.Position(startLineIdx, 0), new vscode.Position(startLineIdx, lineText.length))
+          });
+        }
+        startLineIdx++;
+      }
+    }
+
+    for (let lineIdx = startLineIdx; lineIdx < document.lineCount; lineIdx++) {
       const lineText = document.lineAt(lineIdx).text;
       const trimmed = lineText.trim();
 

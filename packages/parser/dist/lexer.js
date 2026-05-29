@@ -46,6 +46,14 @@ function tokenize(source) {
             tokens.push({ type: 'DIRECTIVE_START', text: line, lineNum });
             continue;
         }
+        // Handle Hierarchical Directive Start (e.g. #page, >warning, %note, or # Titulo)
+        if (/^[#>%]/.test(line)) {
+            const hMatch = line.match(/^([#>%]+)(?:([a-zA-Z0-9_\-]+))?(?:\s+(.*))?$/);
+            if (hMatch) {
+                tokens.push({ type: 'HIERARCHICAL_DIRECTIVE_START', text: line, lineNum });
+                continue;
+            }
+        }
         // Handle Directive End
         if (/^@end(-[a-zA-Z0-9_\-]+)?$/.test(line)) {
             tokens.push({ type: 'DIRECTIVE_END', text: line, lineNum });

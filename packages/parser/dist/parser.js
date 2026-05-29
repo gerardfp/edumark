@@ -64,6 +64,15 @@ function parse(source) {
 }
 function parseBlocks(tokens, errors, state = { idx: 0 }, parentDirectives = []) {
     const nodes = [];
+    const hStack = [];
+    function addNode(node) {
+        if (hStack.length > 0) {
+            hStack[hStack.length - 1].node.children.push(node);
+        }
+        else {
+            nodes.push(node);
+        }
+    }
     while (state.idx < tokens.length) {
         const tok = tokens[state.idx];
         if (tok.type === 'EMPTY_LINE') {
@@ -97,7 +106,7 @@ function parseBlocks(tokens, errors, state = { idx: 0 }, parentDirectives = []) 
                     lineNum: startLine
                 });
             }
-            nodes.push({
+            addNode({
                 type: 'code-block',
                 language,
                 content: codeLines.join('\n')
@@ -115,7 +124,7 @@ function parseBlocks(tokens, errors, state = { idx: 0 }, parentDirectives = []) 
             try {
                 const tableNode = (0, table_parser_js_1.parseGeometricTable)(tableLines.join('\n'));
                 if (tableNode.cells.length > 0) {
-                    nodes.push(tableNode);
+                    addNode(tableNode);
                 }
                 else {
                     errors.push({
@@ -145,11 +154,42 @@ function parseBlocks(tokens, errors, state = { idx: 0 }, parentDirectives = []) 
                 checked = true;
                 content = itemText.substring(3).trim();
             }
-            nodes.push({
+            addNode({
                 type: 'list-item',
                 checked,
                 content
             });
+            state.idx++;
+            continue;
+        }
+        // Hierarchical Directives
+        if (tok.type === 'HIERARCHICAL_DIRECTIVE_START') {
+            const lineText = tok.text.trim();
+            const match = lineText.match(/^([#>%]+)(?:([a-zA-Z0-9_\-]+))?(?:\s+(.*))?$/);
+            if (match) {
+                const hashes = match[1];
+                const dirName = match[2] || 'generic';
+                const dirArgsStr = (match[3] || '').trim();
+                const level = hashes.length;
+                const title = dirArgsStr || undefined;
+                const node = {
+                    type: 'directive',
+                    name: dirName,
+                    title,
+                    children: []
+                };
+                // Unwind hStack for any level >= new level
+                while (hStack.length > 0 && hStack[hStack.length - 1].level >= level) {
+                    hStack.pop();
+                }
+                if (hStack.length > 0) {
+                    hStack[hStack.length - 1].node.children.push(node);
+                }
+                else {
+                    nodes.push(node);
+                }
+                hStack.push({ node, level });
+            }
             state.idx++;
             continue;
         }
@@ -180,7 +220,7 @@ function parseBlocks(tokens, errors, state = { idx: 0 }, parentDirectives = []) 
             }
             if (dirName === 'section') {
                 const title = dirArgsStr || undefined;
-                nodes.push({
+                addNode({
                     type: 'directive',
                     name: 'section',
                     title,
@@ -223,7 +263,7 @@ function parseBlocks(tokens, errors, state = { idx: 0 }, parentDirectives = []) 
                         }
                     }
                 }
-                nodes.push({
+                addNode({
                     type: 'question',
                     questionType,
                     prompt: promptLines.join('\n\n'),
@@ -242,7 +282,7 @@ function parseBlocks(tokens, errors, state = { idx: 0 }, parentDirectives = []) 
                         }
                     }
                 }
-                nodes.push({
+                addNode({
                     type: 'directive',
                     name: dirName,
                     title,
@@ -290,7 +330,7 @@ function parseBlocks(tokens, errors, state = { idx: 0 }, parentDirectives = []) 
                 paragraphLines.push(tokens[state.idx].text);
                 state.idx++;
             }
-            nodes.push({
+            addNode({
                 type: 'paragraph',
                 content: paragraphLines.join('\n')
             });
