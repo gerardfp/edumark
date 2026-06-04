@@ -15,13 +15,13 @@ num * {
     color: rgb(92, 92, 92);
 }
 
-page {
-    color: #8bb2f6a2;
+page, pagina {
+    color: #5c5c5c;
 
     title {
-        color: rgb(12, 64, 113);
+        background-color: #1f628e;
+        color: white;
         font-weight: bold;
-        background-color: rgb(109, 178, 215);
     }
 }
 
@@ -35,108 +35,25 @@ gt {
     }
 }
 
-page {
-    color: rgb(187, 187, 187);
+
+
+idevice-* {
+    color: #5c5c5c;
 
     title {
-        color: white;
+        background-color: orange;
+        color: #1f628e;
         font-weight: bold;
     }
 }
 
-section {
-    color: #5590f0b1;
+commat * {
+    color: darkmagenta;
+    background-color: transparent;
 
     title {
-        color: rgb(8, 178, 8);
-        font-weight: bold;
-    }
-}
-
-didyouknow {
-    color: #8b5cf6;
-
-    title {
-        font-weight: bold;
-    }
-}
-
-warning {
-    color: #f97316;
-
-    title {
-        font-weight: bold;
-    }
-}
-
-hint {
-    color: #22c55e;
-
-    title {
-        font-weight: bold;
-    }
-}
-
-solution {
-    color: #a855f7;
-
-    title {
-        font-weight: bold;
-    }
-}
-
-reflection {
-    color: #6366f1;
-
-    title {
-        font-weight: bold;
-    }
-}
-
-activity {
-    color: #f43f5e;
-
-    title {
-        font-weight: bold;
-    }
-}
-
-note {
-    color: #64748b;
-
-    title {
-        font-weight: bold;
-    }
-}
-
-question {
-    color: #14b8a6;
-
-    title {
-        font-weight: bold;
-    }
-}
-
-rubric {
-    color: #ec4899;
-
-    title {
-        font-weight: bold;
-    }
-}
-
-ask_yourself {
-    color: magenta;
-
-    title {
-        color: magenta;
-    }
-}
-
-pestanas {
-    color: #d935d1;
-
-    title {
+        color: darkmagenta;
+        background-color: transparent;
         font-weight: bold;
     }
 }
@@ -146,5 +63,15 @@ generic {
 
     title {
         font-weight: bold;
+    }
+}
+
+imagen, portada {
+    title {
+        color: rgb(239, 68, 68);
+        font-weight: bold;
+    }
+    params {
+        color: rgb(163, 163, 163);
     }
 }

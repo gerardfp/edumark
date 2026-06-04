@@ -3,14 +3,11 @@
     - Cierre @end
 
 * Directivas jerárquicas con # > %
-    - Apertura #tipo Titulo
-    - Cierre la proxima Directivas
-    - El tipo es opcional
-    - el número de símbolos determina el nivel jerárquico
-
-
-
-Ejemplo directivas:
-symbol: # > @
-type: page, section
-title: Pagina principal
+    - Apertura #nombre Titulo
+    - Estructura: Todas las directivas se clasifican internamente en el formato "categoria-tipo" mediante alias por defecto o personalizados en el frontmatter.
+    - Cierre: Una directiva se cierra implícitamente cuando empieza otra de la misma categoría.
+    - Categorías por defecto:
+        - `block` (ej. `block-page` con alias `page` y `pagina`): Es la única categoría multinivel. El número de símbolos de inicio (ej. #, ##, ###) determina el nivel jerárquico y anidamiento. Además, una directiva de categoría `block` cierra cualquier directiva de otra categoría.
+        - `idevice` (ej. `idevice-text` con alias `seccion`, `idevice-activity` con alias `tarea`, `idevice-rubric` con alias `rubrica`): Directivas planas.
+        - `media` (ej. `media-image` con alias `imagen`, `media-cover` con alias `portada`): Directivas planas para contenido multimedia.
+        - `tab` (ej. `tab-item` con alias `item`): Directivas para elementos de pestañas.

@@ -5,18 +5,86 @@ const lexer_js_1 = require("./lexer.js");
 const table_parser_js_1 = require("./table-parser.js");
 function parseFrontmatter(lines) {
     const meta = {};
+    let inAliases = false;
+    const aliases = {};
     for (const line of lines) {
         const trim = line.trim();
         if (!trim)
             continue;
+        // Check if line is indented and we are currently in an aliases block
+        if (inAliases && (line.startsWith(' ') || line.startsWith('\t'))) {
+            const idx = trim.indexOf(':');
+            if (idx !== -1) {
+                const k = trim.substring(0, idx).trim();
+                const v = trim.substring(idx + 1).trim();
+                aliases[k] = v;
+            }
+            continue;
+        }
         const idx = trim.indexOf(':');
         if (idx !== -1) {
             const k = trim.substring(0, idx).trim();
             const v = trim.substring(idx + 1).trim();
-            meta[k] = v;
+            if (k === 'aliases') {
+                inAliases = true;
+            }
+            else {
+                inAliases = false;
+                meta[k] = v;
+                if (k.startsWith('alias_') || k.startsWith('alias-')) {
+                    const aliasName = k.substring(6);
+                    aliases[aliasName] = v;
+                }
+            }
+        }
+        else {
+            inAliases = false;
         }
     }
+    if (Object.keys(aliases).length > 0) {
+        meta.aliases = aliases;
+    }
     return meta;
+}
+function getCategory(name) {
+    const idx = name.indexOf('-');
+    if (idx !== -1) {
+        return name.substring(0, idx);
+    }
+    return name;
+}
+function resolveName(name, frontmatter) {
+    const defaultAliases = {
+        'page': 'block-page',
+        'pagina': 'block-page',
+        'seccion': 'idevice-text',
+        'tarea': 'idevice-activity',
+        'rubrica': 'idevice-rubric',
+        'imagen': 'media-image',
+        'portada': 'media-cover',
+        'item': 'tab-item'
+    };
+    if (frontmatter && frontmatter.aliases && typeof frontmatter.aliases === 'object') {
+        if (name in frontmatter.aliases) {
+            return String(frontmatter.aliases[name]);
+        }
+    }
+    return defaultAliases[name] || name;
+}
+function shouldClose(openItem, newItem, frontmatter) {
+    const rOpen = resolveName(openItem.node.name, frontmatter);
+    const rNew = resolveName(newItem.node.name, frontmatter);
+    const categoryOpen = getCategory(rOpen);
+    const categoryNew = getCategory(rNew);
+    if (categoryNew === 'block') {
+        if (categoryOpen === 'block') {
+            return openItem.level >= newItem.level;
+        }
+        return true;
+    }
+    else {
+        return categoryOpen === categoryNew;
+    }
 }
 function parse(source) {
     const tokens = (0, lexer_js_1.tokenize)(source);
@@ -54,7 +122,7 @@ function parse(source) {
         frontmatter = parseFrontmatter(fmLines);
     }
     // 2. Parse Blocks recursively
-    const { nodes: astChildren } = parseBlocks(tokens.slice(tokenIdx), errors);
+    const { nodes: astChildren } = parseBlocks(tokens.slice(tokenIdx), errors, { idx: 0 }, [], frontmatter);
     const ast = {
         type: 'document',
         frontmatter,
@@ -62,7 +130,7 @@ function parse(source) {
     };
     return { ast, errors };
 }
-function parseBlocks(tokens, errors, state = { idx: 0 }, parentDirectives = []) {
+function parseBlocks(tokens, errors, state = { idx: 0 }, parentDirectives = [], frontmatter = {}) {
     const nodes = [];
     const hStack = [];
     function addNode(node) {
@@ -178,9 +246,17 @@ function parseBlocks(tokens, errors, state = { idx: 0 }, parentDirectives = []) 
                     title,
                     children: []
                 };
-                // Unwind hStack for any level >= new level
-                while (hStack.length > 0 && hStack[hStack.length - 1].level >= level) {
-                    hStack.pop();
+                const newItem = { node, level };
+                // Unwind hStack using shouldClose logic
+                let closeIdx = -1;
+                for (let i = 0; i < hStack.length; i++) {
+                    if (shouldClose(hStack[i], newItem, frontmatter)) {
+                        closeIdx = i;
+                        break;
+                    }
+                }
+                if (closeIdx !== -1) {
+                    hStack.splice(closeIdx);
                 }
                 if (hStack.length > 0) {
                     hStack[hStack.length - 1].node.children.push(node);
@@ -188,7 +264,7 @@ function parseBlocks(tokens, errors, state = { idx: 0 }, parentDirectives = []) 
                 else {
                     nodes.push(node);
                 }
-                hStack.push({ node, level });
+                hStack.push(newItem);
             }
             state.idx++;
             continue;
@@ -231,7 +307,7 @@ function parseBlocks(tokens, errors, state = { idx: 0 }, parentDirectives = []) 
             }
             // We are entering a didactical block / question
             state.idx++; // consume the DIRECTIVE_START token
-            const { nodes: children, closed: innerClosed } = parseBlocks(tokens, errors, state, [...parentDirectives, dirName]);
+            const { nodes: children, closed: innerClosed } = parseBlocks(tokens, errors, state, [...parentDirectives, dirName], frontmatter);
             if (!innerClosed) {
                 errors.push({
                     message: `Bloque didáctico "@${dirName}" sin cerrar. Se esperaba "@end" o "@end-${dirName}".`,

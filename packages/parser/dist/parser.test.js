@@ -166,5 +166,71 @@ contenido 6
         (0, vitest_1.expect)(p2.title).toBe('Pagina 2');
         (0, vitest_1.expect)(p2.children.length).toBe(1); // paragraph 6
     });
+    (0, vitest_1.it)('should handle reorganised hierarchical directives (pages, sections, tasks, images, aliases)', () => {
+        const source = `
+---
+aliases:
+  mi-seccion: idevice-text
+---
+#page Pagina 1
+#seccion Seccion 1
+contenido seccion 1
+#imagen imagen1.png
+#tarea Tarea 1
+contenido tarea 1
+#mi-seccion Seccion Personalizada
+contenido seccion personalizada
+#seccion Seccion 2
+contenido seccion 2
+#page Pagina 2
+contenido pagina 2
+`.trim();
+        const { ast, errors } = (0, parser_js_1.parse)(source);
+        (0, vitest_1.expect)(errors.length).toBe(0);
+        (0, vitest_1.expect)(ast.children.length).toBe(2);
+        const p1 = ast.children[0];
+        (0, vitest_1.expect)(p1.type).toBe('directive');
+        (0, vitest_1.expect)(p1.name).toBe('page');
+        (0, vitest_1.expect)(p1.title).toBe('Pagina 1');
+        // Children of Page 1:
+        // 1. Seccion 1 (which contains paragraph & imagen, since imagen doesn't close it)
+        // 2. Tarea 1 (closes Seccion 1 because both are idevices)
+        // 3. Mi-seccion (closes Tarea 1 because both are idevices)
+        // 4. Seccion 2 (closes Mi-seccion because both are idevices)
+        (0, vitest_1.expect)(p1.children.length).toBe(4);
+        const sec1 = p1.children[0];
+        (0, vitest_1.expect)(sec1.type).toBe('directive');
+        (0, vitest_1.expect)(sec1.name).toBe('seccion');
+        (0, vitest_1.expect)(sec1.title).toBe('Seccion 1');
+        (0, vitest_1.expect)(sec1.children.length).toBe(2);
+        (0, vitest_1.expect)(sec1.children[0].content).toBe('contenido seccion 1');
+        (0, vitest_1.expect)(sec1.children[1].type).toBe('directive');
+        (0, vitest_1.expect)(sec1.children[1].name).toBe('imagen');
+        (0, vitest_1.expect)(sec1.children[1].title).toBe('imagen1.png');
+        const tarea1 = p1.children[1];
+        (0, vitest_1.expect)(tarea1.type).toBe('directive');
+        (0, vitest_1.expect)(tarea1.name).toBe('tarea');
+        (0, vitest_1.expect)(tarea1.title).toBe('Tarea 1');
+        (0, vitest_1.expect)(tarea1.children.length).toBe(1);
+        (0, vitest_1.expect)(tarea1.children[0].content).toBe('contenido tarea 1');
+        const misec = p1.children[2];
+        (0, vitest_1.expect)(misec.type).toBe('directive');
+        (0, vitest_1.expect)(misec.name).toBe('mi-seccion');
+        (0, vitest_1.expect)(misec.title).toBe('Seccion Personalizada');
+        (0, vitest_1.expect)(misec.children.length).toBe(1);
+        (0, vitest_1.expect)(misec.children[0].content).toBe('contenido seccion personalizada');
+        const sec2 = p1.children[3];
+        (0, vitest_1.expect)(sec2.type).toBe('directive');
+        (0, vitest_1.expect)(sec2.name).toBe('seccion');
+        (0, vitest_1.expect)(sec2.title).toBe('Seccion 2');
+        (0, vitest_1.expect)(sec2.children.length).toBe(1);
+        (0, vitest_1.expect)(sec2.children[0].content).toBe('contenido seccion 2');
+        const p2 = ast.children[1];
+        (0, vitest_1.expect)(p2.type).toBe('directive');
+        (0, vitest_1.expect)(p2.name).toBe('page');
+        (0, vitest_1.expect)(p2.title).toBe('Pagina 2');
+        (0, vitest_1.expect)(p2.children.length).toBe(1);
+        (0, vitest_1.expect)(p2.children[0].content).toBe('contenido pagina 2');
+    });
 });
 //# sourceMappingURL=parser.test.js.map
