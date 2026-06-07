@@ -880,6 +880,10 @@ export function activate(context: vscode.ExtensionContext) {
     }
   }
 
+  function getParameterBalance(str: string): number {
+    return getBraceBalance(str);
+  }
+
   function updateEndDecorations(editor: vscode.TextEditor) {
     const document = editor.document;
     const combinedDecorations = new Map<string, vscode.DecorationOptions[]>();
@@ -887,6 +891,12 @@ export function activate(context: vscode.ExtensionContext) {
     const stack: { name: string; title: string; level?: number; isBlock?: boolean }[] = [];
     const frontmatterAliases: Record<string, string> = {};
     let inAliases = false;
+
+    let inParameterBlock = false;
+    let parameterBalance = 0;
+    let parameterSymbol = '#';
+    let parameterTypeName = 'generic';
+    let parameterResolvedName = 'generic';
 
     let startLineIdx = 0;
     if (document.lineCount > 0 && document.lineAt(0).text.trim() === '---') {
@@ -983,6 +993,27 @@ export function activate(context: vscode.ExtensionContext) {
     for (let lineIdx = startLineIdx; lineIdx < document.lineCount; lineIdx++) {
       const lineText = document.lineAt(lineIdx).text;
       const trimmed = lineText.trim();
+
+      if (inParameterBlock) {
+        parameterBalance += getParameterBalance(lineText);
+        
+        const range = new vscode.Range(new vscode.Position(lineIdx, 0), new vscode.Position(lineIdx, lineText.length));
+        const finalBaseStyle = getFinalBaseStyle(parameterSymbol, parameterTypeName, parameterResolvedName);
+        const finalParamsStyle = getFinalNestedStyle(parameterSymbol, parameterTypeName, 'params', finalBaseStyle, parameterResolvedName);
+        
+        const decType = getDecorationType(finalParamsStyle);
+        const cacheKey = JSON.stringify(finalParamsStyle);
+        decorationTypes.set(cacheKey, decType);
+        if (!combinedDecorations.has(cacheKey)) {
+          combinedDecorations.set(cacheKey, []);
+        }
+        combinedDecorations.get(cacheKey)!.push({ range });
+
+        if (parameterBalance <= 0) {
+          inParameterBlock = false;
+        }
+        continue;
+      }
 
       // Check directive start
       if (trimmed.startsWith('@') && !trimmed.startsWith('@end') && /^[a-zA-Z]/.test(trimmed.substring(1))) {
@@ -1110,6 +1141,7 @@ export function activate(context: vscode.ExtensionContext) {
             }
 
             // 2. Title -> bold style, or split title & parameters if parameters exist
+            let hasSameLineParams = false;
             if (title) {
               const titleIdx = lineText.indexOf(title, cmdIdx + cmdText.length);
               if (titleIdx !== -1) {
@@ -1118,6 +1150,7 @@ export function activate(context: vscode.ExtensionContext) {
                 const paramsText = (titleMatch && titleMatch[2]) ? titleMatch[2].trim() : '';
 
                 if (paramsText) {
+                  hasSameLineParams = true;
                   // Style main title text (using 'title' selector)
                   if (mainTitleText) {
                     const mainTitleIdx = titleIdx + title.indexOf(mainTitleText);
@@ -1151,6 +1184,15 @@ export function activate(context: vscode.ExtensionContext) {
                     }
                     combinedDecorations.get(cacheKey)!.push({ range });
                   }
+
+                  const lineBalance = getParameterBalance(paramsText);
+                  if (lineBalance > 0) {
+                    inParameterBlock = true;
+                    parameterBalance = lineBalance;
+                    parameterSymbol = symbol;
+                    parameterTypeName = name;
+                    parameterResolvedName = resolvedName;
+                  }
                 } else {
                   // No parameters, style the entire title as 'title'
                   const titleStart = new vscode.Position(lineIdx, titleIdx);
@@ -1167,6 +1209,17 @@ export function activate(context: vscode.ExtensionContext) {
                   }
                   combinedDecorations.get(cacheKeyBold)!.push({ range: titleRange });
                 }
+              }
+            }
+
+            if (!hasSameLineParams) {
+              const nextLineText = lineIdx + 1 < document.lineCount ? document.lineAt(lineIdx + 1).text.trim() : '';
+              if (nextLineText.startsWith('{')) {
+                inParameterBlock = true;
+                parameterBalance = 0;
+                parameterSymbol = symbol;
+                parameterTypeName = name;
+                parameterResolvedName = resolvedName;
               }
             }
           }
@@ -1354,6 +1407,18 @@ export function activate(context: vscode.ExtensionContext) {
       }
     )
   );
+
+  return {
+    parseEdumark(source: string, aliasesModule?: any) {
+      return parseEdumark(source, aliasesModule);
+    },
+    parseSectionContent(lines: string[], metadata?: any) {
+      return parseSectionContent(lines, metadata);
+    },
+    parseParametersString(str: string) {
+      return parseParametersString(str);
+    }
+  };
 }
 
 function getProjectRoot(document: vscode.TextDocument): vscode.Uri {
@@ -1503,6 +1568,752 @@ class EdumarkPasteEditProvider implements vscode.DocumentPasteEditProvider {
     }
     return undefined;
   }
+}
+
+export interface EdumarkPage {
+    id: string;
+    title: string;
+    level: number;
+    slug: string;
+    filename: string;
+    parent: EdumarkPage | null;
+    children: EdumarkPage[];
+    sections: EdumarkSection[];
+    type?: string;
+    options?: any;
+}
+
+export interface EdumarkSection {
+    blockId: string;
+    componentId: string;
+    title: string;
+    contentLines: string[];
+    contentHtml?: string;
+}
+
+export interface SectionBlock {
+    type: 'text' | 'directive' | 'component';
+    name?: string;
+    title?: string;
+    level?: number;
+    content?: string[];
+    children?: SectionBlock[];
+    literalStr?: string;
+}
+
+function generateId(): string {
+    return Math.random().toString(36).substring(2, 9) + '_' + Math.random().toString(36).substring(2, 9);
+}
+
+function getBraceBalance(str: string): number {
+    let balance = 0;
+    let inSingleQuote = false;
+    let inDoubleQuote = false;
+    let inTemplateLiteral = false;
+    let escape = false;
+
+    for (let i = 0; i < str.length; i++) {
+        const char = str[i];
+        if (escape) {
+            escape = false;
+            continue;
+        }
+        if (char === '\\') {
+            escape = true;
+            continue;
+        }
+        if (char === "'" && !inDoubleQuote && !inTemplateLiteral) {
+            const isApostrophe = i > 0 && i < str.length - 1 && /[a-zA-Z0-9]/.test(str[i-1]) && /[a-zA-Z0-9]/.test(str[i+1]);
+            if (!isApostrophe) {
+                inSingleQuote = !inSingleQuote;
+            }
+            continue;
+        }
+        if (char === '"' && !inSingleQuote && !inTemplateLiteral) {
+            inDoubleQuote = !inDoubleQuote;
+            continue;
+        }
+        if (char === '`' && !inSingleQuote && !inDoubleQuote) {
+            inTemplateLiteral = !inTemplateLiteral;
+            continue;
+        }
+        if (!inSingleQuote && !inDoubleQuote && !inTemplateLiteral) {
+            if (char === '{') {
+                balance++;
+            } else if (char === '}') {
+                balance--;
+            }
+        }
+    }
+    return balance;
+}
+
+function generateSlug(text: string): string {
+    return text
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+}
+
+function parseJsObject(str: string): any {
+    try {
+        return new Function(`return (${str});`)();
+    } catch (err: any) {
+        throw new Error(`Error de sintaxis en el literal del componente: ${err.message}`);
+    }
+}
+
+function parseParametersString(str: string): Record<string, any> {
+    let cleanStr = str.trim();
+    if (cleanStr.startsWith('{') && cleanStr.endsWith('}')) {
+        cleanStr = cleanStr.substring(1, cleanStr.length - 1).trim();
+    }
+    
+    const firstKeyMatch = cleanStr.match(/^([a-zA-Z0-9_\-]+)\s*:/);
+    if (!firstKeyMatch) {
+        return {};
+    }
+    
+    const keys: { name: string; startIndex: number; valueStartIndex: number; endIndex?: number }[] = [];
+    keys.push({
+        name: firstKeyMatch[1],
+        startIndex: 0,
+        valueStartIndex: firstKeyMatch[0].length
+    });
+    
+    const keyRegex = /,\s*([a-zA-Z0-9_\-]+)\s*:/g;
+    let match;
+    while ((match = keyRegex.exec(cleanStr)) !== null) {
+        const prevKey = keys[keys.length - 1];
+        prevKey.endIndex = match.index;
+        
+        keys.push({
+            name: match[1],
+            startIndex: match.index,
+            valueStartIndex: match.index + match[0].length
+        });
+    }
+    
+    keys[keys.length - 1].endIndex = cleanStr.length;
+    
+    const attrs: Record<string, any> = {};
+    for (const key of keys) {
+        const k = key.name.trim().toLowerCase();
+        let v = cleanStr.substring(key.valueStartIndex, key.endIndex!).trim();
+        
+        if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+            v = v.substring(1, v.length - 1).trim();
+        }
+        
+        if (v.toLowerCase() === 'true') {
+            attrs[k] = true;
+        } else if (v.toLowerCase() === 'false') {
+            attrs[k] = false;
+        } else if (/^\d+(\.\d+)?$/.test(v)) {
+            attrs[k] = Number(v);
+        } else {
+            attrs[k] = v;
+        }
+    }
+    
+    return attrs;
+}
+
+function extractParameters(lines: string[], currentIdx: number, titleWithParams: string): { title: string, params: string, nextIdx: number } {
+    let title = titleWithParams.trim();
+    let params = '';
+    let nextIdx = currentIdx;
+
+    const braceIdx = title.indexOf('{');
+    if (braceIdx !== -1) {
+        const mainTitle = title.substring(0, braceIdx).trim();
+        const startParams = title.substring(braceIdx);
+        
+        let balance = getBraceBalance(startParams);
+        let paramsLines = [startParams];
+        
+        while (balance > 0 && nextIdx + 1 < lines.length) {
+            nextIdx++;
+            const nextLine = lines[nextIdx];
+            paramsLines.push(nextLine);
+            balance += getBraceBalance(nextLine);
+        }
+        
+        const fullParams = paramsLines.join('\n');
+        const firstBrace = fullParams.indexOf('{');
+        const lastBrace = fullParams.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+            params = fullParams.substring(firstBrace + 1, lastBrace).trim();
+        } else {
+            params = fullParams.substring(firstBrace + 1).trim();
+        }
+        
+        return { title: mainTitle, params, nextIdx };
+    }
+
+    if (currentIdx + 1 < lines.length) {
+        const nextLine = lines[currentIdx + 1];
+        if (nextLine.trim().startsWith('{')) {
+            nextIdx++;
+            let balance = getBraceBalance(nextLine);
+            let paramsLines = [nextLine];
+            
+            while (balance > 0 && nextIdx + 1 < lines.length) {
+                nextIdx++;
+                const nextLine = lines[nextIdx];
+                paramsLines.push(nextLine);
+                balance += getBraceBalance(nextLine);
+            }
+            
+            const fullParams = paramsLines.join('\n');
+            const firstBrace = fullParams.indexOf('{');
+            const lastBrace = fullParams.lastIndexOf('}');
+            if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+                params = fullParams.substring(firstBrace + 1, lastBrace).trim();
+            } else {
+                params = fullParams.substring(firstBrace + 1).trim();
+            }
+            
+            return { title, params, nextIdx };
+        }
+    }
+
+    return { title, params, nextIdx };
+}
+
+function parseSectionContent(lines: string[], metadata?: Record<string, string>): SectionBlock[] {
+    const rootBlocks: SectionBlock[] = [];
+    const stack: SectionBlock[] = [];
+
+    const defaultAliases: Record<string, string> = {
+        'page': 'block-page',
+        'pagina': 'block-page',
+        'seccion': 'idevice-text',
+        'tarea': 'idevice-activity',
+        'rubrica': 'idevice-rubric',
+        'imagen': 'media-image',
+        'portada': 'media-cover',
+        'item': 'tab-item',
+        'actividad': 'idevice-activity',
+        'activity': 'idevice-activity',
+        'atencion': 'idevice-warning',
+        'warning': 'idevice-warning',
+        'sabiasque': 'idevice-didyouknow',
+        'didyouknow': 'idevice-didyouknow',
+        'sugerencia': 'idevice-hint',
+        'hint': 'idevice-hint',
+        'solucion': 'idevice-solution',
+        'solution': 'idevice-solution',
+        'reflexion': 'idevice-reflection',
+        'reflection': 'idevice-reflection',
+        'nota': 'idevice-note',
+        'note': 'idevice-note',
+        'pregunta': 'idevice-question',
+        'question': 'idevice-question',
+        'preguntate': 'idevice-ask_yourself',
+        'ask_yourself': 'idevice-ask_yourself',
+        'informacion': 'idevice-generic',
+        'generic': 'idevice-generic'
+    };
+    
+    function resolveName(name: string) {
+        if (metadata && metadata.aliases && typeof metadata.aliases === 'object') {
+            if (name in metadata.aliases) {
+                return String(metadata.aliases[name]);
+            }
+        }
+        return defaultAliases[name] || name;
+    }
+
+    function getCategory(name: string) {
+        const idx = name.indexOf('-');
+        return idx !== -1 ? name.substring(0, idx) : name;
+    }
+
+    function shouldClose(openBlock: SectionBlock, newBlock: SectionBlock) {
+        const rOpen = resolveName(openBlock.name || '');
+        const rNew = resolveName(newBlock.name || '');
+        const catOpen = getCategory(rOpen);
+        const catNew = getCategory(rNew);
+        if (catNew === 'block') {
+            if (catOpen === 'block') {
+                return (openBlock.level || 1) >= (newBlock.level || 1);
+            }
+            return true;
+        }
+        return catOpen === catNew;
+    }
+
+    let inComponent = false;
+    let componentName = '';
+    let componentLevel: number | undefined = undefined;
+    let componentLinesAccumulator: string[] = [];
+    let braceBalance = 0;
+
+    function getCurrentContainer(): SectionBlock[] {
+        if (stack.length > 0) {
+            return stack[stack.length - 1].children!;
+        }
+        return rootBlocks;
+    }
+
+    function appendTextLine(line: string) {
+        const container = getCurrentContainer();
+        if (container.length > 0 && container[container.length - 1].type === 'text') {
+            container[container.length - 1].content!.push(line);
+        } else {
+            container.push({ type: 'text', content: [line] });
+        }
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+
+        if (inComponent) {
+            componentLinesAccumulator.push(line);
+            braceBalance += getBraceBalance(line);
+            if (braceBalance <= 0) {
+                const literalStr = componentLinesAccumulator.join('\n');
+                getCurrentContainer().push({
+                    type: 'component',
+                    name: componentName,
+                    level: componentLevel,
+                    literalStr: literalStr
+                });
+                inComponent = false;
+                componentName = '';
+                componentLevel = undefined;
+                componentLinesAccumulator = [];
+                braceBalance = 0;
+            }
+            continue;
+        }
+
+        let isComp = false;
+        let hashes: string | undefined = undefined;
+        let level: number | undefined = undefined;
+        let rest: string | undefined = undefined;
+
+        let compMatch = trimmed.match(/^:::([a-zA-Z0-9_\-]+)(?:\s*(\{.*))?$/);
+        if (compMatch) {
+            isComp = true;
+            componentName = compMatch[1];
+            rest = compMatch[2];
+        } else {
+            compMatch = trimmed.match(/^(#{1,5})([a-zA-Z0-9_\-]+)(?:\s*(\{.*))$/);
+            if (compMatch) {
+                isComp = true;
+                hashes = compMatch[1];
+                level = hashes.length;
+                componentName = compMatch[2];
+                rest = compMatch[3];
+            }
+        }
+
+        if (isComp) {
+            if (!rest) {
+                getCurrentContainer().push({
+                    type: 'component',
+                    name: componentName,
+                    level: level,
+                    literalStr: '{}'
+                });
+            } else {
+                braceBalance = getBraceBalance(rest);
+                if (braceBalance <= 0) {
+                    getCurrentContainer().push({
+                        type: 'component',
+                        name: componentName,
+                        level: level,
+                        literalStr: rest
+                    });
+                } else {
+                    inComponent = true;
+                    componentLevel = level;
+                    componentLinesAccumulator = [rest];
+                }
+            }
+            continue;
+        }
+
+        if (trimmed.startsWith('@') && !trimmed.startsWith('@end') && /^[a-zA-Z_]/.test(trimmed.substring(1))) {
+            const match = trimmed.match(/^@([a-zA-Z0-9_\-]+)(?:\s+(.*))?$/);
+            if (match) {
+                const name = match[1];
+                const ext = extractParameters(lines, i, match[2] || '');
+                const title = ext.title || undefined;
+                const paramsStr = ext.params;
+                i = ext.nextIdx;
+
+                const newBlock: SectionBlock = {
+                    type: 'directive',
+                    name,
+                    title,
+                    children: [],
+                    literalStr: paramsStr
+                };
+                getCurrentContainer().push(newBlock);
+                stack.push(newBlock);
+            } else {
+                appendTextLine(line);
+            }
+            continue;
+        }
+
+        if (trimmed.startsWith('@end')) {
+            let foundIdx = -1;
+            for (let j = stack.length - 1; j >= 0; j--) {
+                if (stack[j].type === 'directive' && stack[j].level === undefined) {
+                    foundIdx = j;
+                    break;
+                }
+            }
+            if (foundIdx !== -1) {
+                stack.splice(foundIdx);
+            } else if (stack.length > 0) {
+                stack.pop();
+            }
+            continue;
+        }
+
+        const mName = trimmed.match(/^(#{1,5})([a-zA-Z0-9_\-]+)(?:\s+(.+))?$/);
+        if (mName && mName[2].toLowerCase() !== 'pagina') {
+            const level = mName[1].length;
+            const name = mName[2].toLowerCase();
+            
+            const ext = extractParameters(lines, i, mName[3] || '');
+            const title = ext.title;
+            const paramsStr = ext.params;
+            i = ext.nextIdx;
+
+            const newBlock: SectionBlock = {
+                type: 'directive',
+                name,
+                title,
+                level,
+                children: [],
+                literalStr: paramsStr
+            };
+
+            let closeIdx = -1;
+            for (let j = 0; j < stack.length; j++) {
+                if (stack[j].type === 'directive' && stack[j].level !== undefined) {
+                    if (shouldClose(stack[j], newBlock)) {
+                        closeIdx = j;
+                        break;
+                    }
+                }
+            }
+            if (closeIdx !== -1) {
+                stack.splice(closeIdx);
+            }
+
+            getCurrentContainer().push(newBlock);
+            const rName = resolveName(name);
+            const category = getCategory(rName);
+            if (category !== 'media') {
+                stack.push(newBlock);
+            }
+            continue;
+        }
+
+        appendTextLine(line);
+    }
+
+    if (inComponent && componentLinesAccumulator.length > 0) {
+        getCurrentContainer().push({
+            type: 'component',
+            name: componentName,
+            literalStr: componentLinesAccumulator.join('\n')
+        });
+    }
+
+    return rootBlocks;
+}
+
+function parseEdumark(source: string, aliasesModule?: any): { metadata: Record<string, string>; pages: EdumarkPage[] } {
+    const defaultAliases: Record<string, string> = {
+        'page': 'block-page',
+        'pagina': 'block-page',
+        'seccion': 'idevice-text',
+        'tarea': 'idevice-activity',
+        'rubrica': 'idevice-rubric',
+        'imagen': 'media-image',
+        'portada': 'media-cover',
+        'item': 'tab-item'
+    };
+    
+    function resolveName(name: string) {
+        if (metadata && metadata.aliases && typeof metadata.aliases === 'object') {
+            if (name in metadata.aliases) {
+                return String(metadata.aliases[name]);
+            }
+        }
+        return defaultAliases[name] || name;
+    }
+
+    function getCategory(name: string) {
+        const idx = name.indexOf('-');
+        return idx !== -1 ? name.substring(0, idx) : name;
+    }
+
+    const lines = source.split(/\r?\n/);
+    const metadata: Record<string, string> = {};
+    let lineIdx = 0;
+
+    if (lines.length > 0 && lines[0].trim() === '---') {
+        lineIdx++;
+        while (lineIdx < lines.length) {
+            const line = lines[lineIdx];
+            const trimmed = line.trim();
+            if (trimmed === '---') {
+                break;
+            }
+            if (trimmed === '') {
+                lineIdx++;
+                continue;
+            }
+            
+            const keyMatch = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*):(.*)$/);
+            if (keyMatch) {
+                const k = keyMatch[1].toLowerCase();
+                const rest = keyMatch[2];
+                const restTrim = rest.trim();
+                
+                if (restTrim.startsWith('"""')) {
+                    if (restTrim.length > 6 && restTrim.endsWith('"""')) {
+                        metadata[k] = restTrim.substring(3, restTrim.length - 3);
+                        lineIdx++;
+                    } else {
+                        const accum: string[] = [];
+                        const firstLineContent = restTrim.substring(3);
+                        if (firstLineContent.trim() !== '') {
+                            accum.push(firstLineContent);
+                        }
+                        lineIdx++;
+                        
+                        let foundEnd = false;
+                        while (lineIdx < lines.length) {
+                            const curLine = lines[lineIdx];
+                            const curTrimmed = curLine.trim();
+                            if (curTrimmed === '---') {
+                                break;
+                            }
+                            if (curTrimmed.endsWith('"""')) {
+                                const lastLineContent = curLine.substring(0, curLine.lastIndexOf('"""'));
+                                if (lastLineContent.trim() !== '') {
+                                    accum.push(lastLineContent);
+                                }
+                                foundEnd = true;
+                                lineIdx++;
+                                break;
+                            }
+                            accum.push(curLine);
+                            lineIdx++;
+                        }
+                        metadata[k] = accum.join('\n');
+                    }
+                } else {
+                    const accum: string[] = [];
+                    if (restTrim !== '') {
+                        accum.push(restTrim);
+                    }
+                    lineIdx++;
+                    
+                    while (lineIdx < lines.length) {
+                        const curLine = lines[lineIdx];
+                        const curTrimmed = curLine.trim();
+                        if (curTrimmed === '---') {
+                            break;
+                        }
+                        const nextKeyMatch = curLine.match(/^([a-zA-Z_][a-zA-Z0-9_]*):/);
+                        if (nextKeyMatch) {
+                            break;
+                        }
+                        accum.push(curLine);
+                        lineIdx++;
+                    }
+                    
+                    let finalVal = accum.join('\n');
+                    if (!finalVal.includes('\n')) {
+                        if (finalVal.startsWith('"') && finalVal.endsWith('"')) {
+                            finalVal = finalVal.substring(1, finalVal.length - 1);
+                        } else if (finalVal.startsWith("'") && finalVal.endsWith("'")) {
+                            finalVal = finalVal.substring(1, finalVal.length - 1);
+                        }
+                    }
+                    metadata[k] = finalVal;
+                }
+            } else {
+                lineIdx++;
+            }
+        }
+        if (lineIdx < lines.length && lines[lineIdx].trim() === '---') {
+            lineIdx++;
+        }
+    }
+
+    const pages: EdumarkPage[] = [];
+    let currentPage: EdumarkPage | null = null;
+    let currentSection: EdumarkSection | null = null;
+
+    function startNewPage(title: string, level: number, type: string = 'pagina'): EdumarkPage {
+        const slug = generateSlug(title);
+        const id = 'page_' + generateId();
+        const filename = pages.length === 0 ? 'index.html' : `html/${slug}.html`;
+
+        const newPage: EdumarkPage = {
+            id,
+            title,
+            level,
+            slug,
+            filename,
+            parent: null,
+            children: [],
+            sections: [],
+            type
+        };
+        pages.push(newPage);
+        currentPage = newPage;
+        startNewSection('');
+        return newPage;
+    }
+
+    function startNewSection(title: string) {
+        if (!currentPage) {
+            currentPage = startNewPage('Portada', 1);
+        }
+        const blockId = 'block_' + generateId();
+        const componentId = 'component_' + generateId();
+        const newSection: EdumarkSection = {
+            blockId,
+            componentId,
+            title,
+            contentLines: []
+        };
+        currentPage!.sections.push(newSection);
+        currentSection = newSection;
+    }
+
+    for (; lineIdx < lines.length; lineIdx++) {
+        let line = lines[lineIdx];
+        if (aliasesModule && typeof aliasesModule.transformLine === 'function') {
+            try {
+                line = aliasesModule.transformLine(line);
+            } catch (err) {
+                console.error('Error in transformLine:', err);
+            }
+        }
+        const trimmed = line.trim();
+
+        let isPage = false;
+        let pageTitle = '';
+        let pageLevel = 1;
+        let pageType = 'pagina';
+
+        const m1 = trimmed.match(/^(#+)\s*(?:pagina|page)\s+(.+)$/);
+        if (m1) {
+            isPage = true;
+            pageLevel = m1[1].length;
+            pageType = 'pagina';
+            
+            const ext = extractParameters(lines, lineIdx, m1[2]);
+            pageTitle = ext.title;
+            let pageOptions = {};
+            if (ext.params) {
+                try {
+                    pageOptions = parseParametersString(ext.params);
+                } catch (e) {}
+            }
+            currentPage = startNewPage(pageTitle, pageLevel, pageType);
+            if (currentPage) {
+                currentPage.options = pageOptions;
+            }
+            lineIdx = ext.nextIdx;
+            continue;
+        }
+
+        let isSection = false;
+        let isPureSection = false;
+        let secTitle = '';
+
+        const mSec1 = trimmed.match(/^>\s+(.+)$/);
+        if (mSec1 && !trimmed.startsWith('>>')) {
+            isSection = true;
+            isPureSection = true;
+            secTitle = mSec1[1].trim();
+        } else {
+            const mSec2 = trimmed.match(/^(#{1,5})([a-zA-Z0-9_\-]+)(?:\s+(.+))?$/);
+            if (mSec2) {
+                const name = mSec2[2].toLowerCase();
+                if (name !== 'pagina' && name !== 'page') {
+                    const resolved = resolveName(name);
+                    const category = getCategory(resolved);
+                    if (category === 'idevice') {
+                        isSection = true;
+                        isPureSection = (name === 'seccion');
+                        const rawTitle = mSec2[3] ? mSec2[3].trim() : '';
+                        if (rawTitle) {
+                            secTitle = rawTitle;
+                        } else {
+                            secTitle = name.charAt(0).toUpperCase() + name.slice(1);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (isSection) {
+            let overwrote = false;
+            if (currentPage && currentPage.sections.length > 0) {
+                const lastSec = currentPage.sections[currentPage.sections.length - 1];
+                const isSectionTrulyEmpty = lastSec.contentLines.every((l: string) => l.trim() === '');
+                if (lastSec.title === '' && isSectionTrulyEmpty) {
+                    lastSec.title = secTitle;
+                    lastSec.contentLines = [];
+                    currentSection = lastSec;
+                    overwrote = true;
+                }
+            }
+            if (!overwrote) {
+                startNewSection(secTitle);
+            }
+            if (isPureSection) {
+                continue;
+            }
+        }
+
+        if (!currentPage && trimmed === '') {
+            continue;
+        }
+
+        if (!currentSection) {
+            startNewSection('');
+        }
+        currentSection!.contentLines.push(line);
+    }
+
+    const lastPagesByLevel: Record<number, EdumarkPage> = {};
+    for (const p of pages) {
+        const lvl = p.level;
+        lastPagesByLevel[lvl] = p;
+        if (lvl > 1) {
+            let parentLvl = lvl - 1;
+            while (parentLvl > 0 && !lastPagesByLevel[parentLvl]) {
+                parentLvl--;
+            }
+            if (parentLvl > 0) {
+                const parent = lastPagesByLevel[parentLvl];
+                p.parent = parent;
+                parent.children.push(p);
+            }
+        }
+    }
+
+    return { metadata, pages };
 }
 
 export function deactivate() {
