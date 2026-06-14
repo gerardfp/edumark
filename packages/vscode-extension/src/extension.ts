@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 
 let activeDecorations: { [key: string]: vscode.TextEditorDecorationType } = {};
 
@@ -139,33 +140,75 @@ export function activate(context: vscode.ExtensionContext) {
 
   async function loadStylesheets() {
     const rules: Rule[] = [];
-    let loadedProjectCss = false;
 
-    // 1. Buscar en la carpeta del proyecto ".config/hightlight" o ".config/highlight"
+    // 1. Cargar el base.css genérico de edumark
+    const defaultBaseUri = vscode.Uri.joinPath(context.extensionUri, '..', '..', 'highlight', 'base.css');
+    try {
+      const data = await vscode.workspace.fs.readFile(defaultBaseUri);
+      const cssText = Buffer.from(data).toString('utf8');
+      const parsed = parseCSS(cssText);
+      rules.push(...parsed);
+      console.log('Cargado base.css de edumark.');
+    } catch (e) {
+      console.log('No se pudo cargar base.css desde la extensión edumark.');
+    }
+
+    // 2. Cargar highlight de edu2elpx si está instalada
+    const edu2elpxExt = vscode.extensions.getExtension('gerardfp.edu2elpx-vscode');
+    if (edu2elpxExt) {
+      try {
+        const possiblePaths = [
+          vscode.Uri.file(path.join(edu2elpxExt.extensionPath, 'highlight', 'edu2elpx.css')),
+          vscode.Uri.file(path.join(edu2elpxExt.extensionPath, '.config', 'highlight', 'edu2elpx.css'))
+        ];
+        for (const uri of possiblePaths) {
+          if (fs.existsSync(uri.fsPath)) {
+            const data = await vscode.workspace.fs.readFile(uri);
+            const cssText = Buffer.from(data).toString('utf8');
+            const parsed = parseCSS(cssText);
+            rules.push(...parsed);
+            console.log('Cargado highlight de edu2elpx:', uri.fsPath);
+            break;
+          }
+        }
+      } catch (e) {
+        console.error('Error al cargar highlight de edu2elpx:', e);
+      }
+    }
+
+    // 3. Cargar highlight de escola40 si está instalada
+    const escola40Ext = vscode.extensions.getExtension('gerardfp.escola40-vscode');
+    if (escola40Ext) {
+      try {
+        const possiblePaths = [
+          vscode.Uri.file(path.join(escola40Ext.extensionPath, 'highlight', 'escola40.css')),
+          vscode.Uri.file(path.join(escola40Ext.extensionPath, '.config', 'highlight', 'escola40.css'))
+        ];
+        for (const uri of possiblePaths) {
+          if (fs.existsSync(uri.fsPath)) {
+            const data = await vscode.workspace.fs.readFile(uri);
+            const cssText = Buffer.from(data).toString('utf8');
+            const parsed = parseCSS(cssText);
+            rules.push(...parsed);
+            console.log('Cargado highlight de escola40:', uri.fsPath);
+            break;
+          }
+        }
+      } catch (e) {
+        console.error('Error al cargar highlight de escola40:', e);
+      }
+    }
+
+    // 4. Buscar en la carpeta del proyecto ".config/hightlight" o ".config/highlight" (mayor prioridad)
     const projectFiles = await vscode.workspace.findFiles('{**/.config/hightlight/**/*.css,**/.config/highlight/**/*.css}');
     for (const file of projectFiles) {
       try {
         const cssText = await readCssContent(file);
         const parsed = parseCSS(cssText);
         rules.push(...parsed);
-        loadedProjectCss = true;
         console.log('Cargado CSS del proyecto:', file.toString());
       } catch (e) {
         console.error('Error al cargar CSS del proyecto:', file.toString(), e);
-      }
-    }
-
-    // 2. Si no se cargó ningún CSS de proyecto, cargar el base.css de la extensión por defecto
-    if (!loadedProjectCss) {
-      const defaultBaseUri = vscode.Uri.joinPath(context.extensionUri, '..', '..', 'highlight', 'base.css');
-      try {
-        const data = await vscode.workspace.fs.readFile(defaultBaseUri);
-        const cssText = Buffer.from(data).toString('utf8');
-        const parsed = parseCSS(cssText);
-        rules.push(...parsed);
-        console.log('Cargado base.css de la extensión por defecto.');
-      } catch (e) {
-        console.log('No se pudo cargar base.css desde la extensión.');
       }
     }
 

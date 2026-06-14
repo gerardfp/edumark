@@ -15,34 +15,12 @@ num * {
     color: rgb(92, 92, 92);
 }
 
-page, pagina {
-    color: #5c5c5c;
-
-    title {
-        background-color: #1f628e;
-        color: white;
-        font-weight: bold;
-    }
-}
-
 gt {
     color: rgba(0, 128, 0, 0.674);
     font-weight: bold;
 
     title {
         color: rgb(8, 178, 8);
-        font-weight: bold;
-    }
-}
-
-
-
-idevice-* {
-    color: #5c5c5c;
-
-    title {
-        background-color: orange;
-        color: #1f628e;
         font-weight: bold;
     }
 }
@@ -63,15 +41,5 @@ generic {
 
     title {
         font-weight: bold;
-    }
-}
-
-imagen, portada {
-    title {
-        color: rgb(239, 68, 68);
-        font-weight: bold;
-    }
-    params {
-        color: rgb(163, 163, 163);
     }
 }
