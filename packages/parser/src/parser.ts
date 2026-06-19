@@ -85,6 +85,8 @@ function resolveName(name: string, frontmatter: Frontmatter): string {
     'seccion': 'idevice-text',
     'tarea': 'idevice-activity',
     'rubrica': 'idevice-rubric',
+    'cotejo': 'idevice-cotejo',
+    'idevice-cotejo': 'idevice-cotejo',
     'imagen': 'media-image',
     'portada': 'media-cover',
     'item': 'tab-item'

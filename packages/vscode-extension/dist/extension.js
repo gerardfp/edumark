@@ -855,6 +855,8 @@ function activate(context) {
       "seccion": "idevice-text",
       "tarea": "idevice-activity",
       "rubrica": "idevice-rubric",
+      "cotejo": "idevice-cotejo",
+      "idevice-cotejo": "idevice-cotejo",
       "imagen": "media-image",
       "portada": "media-cover",
       "item": "tab-item",
@@ -1621,6 +1623,8 @@ function parseSectionContent(lines, metadata) {
     "seccion": "idevice-text",
     "tarea": "idevice-activity",
     "rubrica": "idevice-rubric",
+    "cotejo": "idevice-cotejo",
+    "idevice-cotejo": "idevice-cotejo",
     "imagen": "media-image",
     "portada": "media-cover",
     "item": "tab-item",
@@ -1846,6 +1850,8 @@ function parseEdumark(source, aliasesModule) {
     "seccion": "idevice-text",
     "tarea": "idevice-activity",
     "rubrica": "idevice-rubric",
+    "cotejo": "idevice-cotejo",
+    "idevice-cotejo": "idevice-cotejo",
     "imagen": "media-image",
     "portada": "media-cover",
     "item": "tab-item"
@@ -1974,7 +1980,7 @@ function parseEdumark(source, aliasesModule) {
     startNewSection("");
     return newPage;
   }
-  function startNewSection(title) {
+  function startNewSection(title, options) {
     if (!currentPage) {
       currentPage = startNewPage("Portada", 1);
     }
@@ -1984,7 +1990,8 @@ function parseEdumark(source, aliasesModule) {
       blockId,
       componentId,
       title,
-      contentLines: []
+      contentLines: [],
+      options: options || {}
     };
     currentPage.sections.push(newSection);
     currentSection = newSection;
@@ -2027,11 +2034,20 @@ function parseEdumark(source, aliasesModule) {
     let isSection = false;
     let isPureSection = false;
     let secTitle = "";
+    let secOptions = {};
     const mSec1 = trimmed.match(/^>\s+(.+)$/);
     if (mSec1 && !trimmed.startsWith(">>")) {
       isSection = true;
       isPureSection = true;
-      secTitle = mSec1[1].trim();
+      const ext = extractParameters(lines, lineIdx, mSec1[1]);
+      secTitle = ext.title;
+      if (ext.params) {
+        try {
+          secOptions = parseParametersString(ext.params);
+        } catch (e) {
+        }
+      }
+      lineIdx = ext.nextIdx;
     } else {
       const mSec2 = trimmed.match(/^(#{1,5})([a-zA-Z0-9_\-]+)(?:\s+(.+))?$/);
       if (mSec2) {
@@ -2043,11 +2059,15 @@ function parseEdumark(source, aliasesModule) {
             isSection = true;
             isPureSection = name === "seccion";
             const rawTitle = mSec2[3] ? mSec2[3].trim() : "";
-            if (rawTitle) {
-              secTitle = rawTitle;
-            } else {
-              secTitle = name.charAt(0).toUpperCase() + name.slice(1);
+            const ext = extractParameters(lines, lineIdx, rawTitle);
+            secTitle = ext.title || (rawTitle ? "" : name.charAt(0).toUpperCase() + name.slice(1));
+            if (ext.params) {
+              try {
+                secOptions = parseParametersString(ext.params);
+              } catch (e) {
+              }
             }
+            lineIdx = ext.nextIdx;
           }
         }
       }
@@ -2060,12 +2080,13 @@ function parseEdumark(source, aliasesModule) {
         if (lastSec.title === "" && isSectionTrulyEmpty) {
           lastSec.title = secTitle;
           lastSec.contentLines = [];
+          lastSec.options = secOptions;
           currentSection = lastSec;
           overwrote = true;
         }
       }
       if (!overwrote) {
-        startNewSection(secTitle);
+        startNewSection(secTitle, secOptions);
       }
       if (isPureSection) {
         continue;

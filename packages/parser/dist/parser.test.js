@@ -232,5 +232,32 @@ contenido pagina 2
         (0, vitest_1.expect)(p2.children.length).toBe(1);
         (0, vitest_1.expect)(p2.children[0].content).toBe('contenido pagina 2');
     });
+    (0, vitest_1.it)('should parse cotejo hierarchical directive and close previous idevice', () => {
+        const source = `
+#page Pagina 1
+#seccion Seccion 1
+contenido seccion 1
+#cotejo Lista de cotejo
+contenido cotejo
+`.trim();
+        const { ast, errors } = (0, parser_js_1.parse)(source);
+        (0, vitest_1.expect)(errors.length).toBe(0);
+        (0, vitest_1.expect)(ast.children.length).toBe(1);
+        const p1 = ast.children[0];
+        (0, vitest_1.expect)(p1.type).toBe('directive');
+        (0, vitest_1.expect)(p1.name).toBe('page');
+        (0, vitest_1.expect)(p1.children.length).toBe(2);
+        const sec1 = p1.children[0];
+        (0, vitest_1.expect)(sec1.type).toBe('directive');
+        (0, vitest_1.expect)(sec1.name).toBe('seccion');
+        (0, vitest_1.expect)(sec1.children.length).toBe(1);
+        (0, vitest_1.expect)(sec1.children[0].content).toBe('contenido seccion 1');
+        const cotejo = p1.children[1];
+        (0, vitest_1.expect)(cotejo.type).toBe('directive');
+        (0, vitest_1.expect)(cotejo.name).toBe('cotejo');
+        (0, vitest_1.expect)(cotejo.title).toBe('Lista de cotejo');
+        (0, vitest_1.expect)(cotejo.children.length).toBe(1);
+        (0, vitest_1.expect)(cotejo.children[0].content).toBe('contenido cotejo');
+    });
 });
 //# sourceMappingURL=parser.test.js.map
